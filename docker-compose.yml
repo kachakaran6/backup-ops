@@ -1,0 +1,170 @@
+version: '3.8'
+
+name: backup-ops
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: backup-ops-postgres
+    environment:
+      POSTGRES_DB: backup_ops
+      POSTGRES_USER: backup_ops
+      POSTGRES_PASSWORD: ${BACKUP_OPS_DB_PASSWORD:-backup_ops_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - backup-ops-network
+    healthcheck:
+      test: ["cmd", "pg_isready", "-U", "backup_ops", "-d", "backup_ops"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: backup-ops-redis
+    command: ["redis-server", "--appendonly", "yes", "--appendfilename", "appendonly.aof"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - backup-ops-network
+    healthcheck:
+      test: ["cmd", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    container_name: backup-ops-api
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://backup_ops:backup_ops_password@postgres:5432/backup_ops
+      REDIS_URL: redis://redis:6379
+      BACKUP_OPS_JWT_SECRET: ${BACKUP_OPS_JWT_SECRET:-your-secret-key-change-in-production}
+      BACKUP_OPS_API_KEY: ${BACKUP_OPS_API_KEY:-your-api-key-change-in-production}
+      BACKUP_OPS_ENCRYPTION_KEY: ${BACKUP_OPS_ENCRYPTION_KEY:-your-encryption-key-change-in-production}
+      BACKUP_OPS_AGENT_ENDPOINT: http://agent:8080
+    volumes:
+      - ./apps/api/src:/app/src
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backup-ops-network
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    container_name: backup-ops-web
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      API_URL: http://api:3000
+      BACKUP_OPS_ENV: development
+    volumes:
+      - ./apps/web/src:/app/src
+      - /app/node_modules
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+    networks:
+      - backup-ops-network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./apps/worker
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    container_name: backup-ops-worker
+    environment:
+      NODE_ENV: development
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://backup_ops:backup_ops_password@postgres:5432/backup_ops
+      BACKUP_OPS_JWT_SECRET: ${BACKUP_OPS_JWT_SECRET:-your-secret-key-change-in-production}
+    volumes:
+      - ./apps/worker/src:/app/src
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backup-ops-network
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile.dev
+    container_name: backup-ops-agent
+    environment:
+      AGENT_ID: ${BACKUP_OPS_AGENT_ID:-agent-001}
+      AGENT_HOST: 0.0.0.0
+      AGENT_PORT: 8080
+      BACKUP_OPS_API_URL: http://api:3000
+      BACKUP_OPS_JWT_SECRET: ${BACKUP_OPS_JWT_SECRET:-your-secret-key-change-in-production}
+      BACKUP_OPS_AGENT_SECRET: ${BACKUP_OPS_AGENT_SECRET:-agent-secret-change-in-production}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+    networks:
+      - backup-ops-network
+    restart: unless-stopped
+
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: backup-ops-reverse-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/conf:/etc/nginx/conf.d
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - web
+      - api
+    networks:
+      - backup-ops-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  nginx_logs:
+
+networks:
+  backup-ops-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
