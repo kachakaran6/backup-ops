@@ -91,7 +91,7 @@ export class OperationProcessor {
       );
     } catch (err) {
       // Fallback if schema uses different casing
-      console.warn(`[Worker DB update skipped]: ${err.message}`);
+      console.warn(`[Worker DB update skipped]: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
