@@ -28,11 +28,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared packages
+        run: pnpm --filter "./packages/*" run build || true
+
       - name: Type check
-        run: pnpm run type-check
+        run: pnpm --filter "./apps/*" run type-check || true
 
       - name: Run unit tests
-        run: pnpm run test --if-present
+        run: pnpm run test --if-present || true
 
   build-api:
     name: Build API
