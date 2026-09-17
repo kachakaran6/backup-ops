@@ -3,7 +3,8 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
-    "declaration": true,
+    "declaration": false,
+    "composite": false,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
