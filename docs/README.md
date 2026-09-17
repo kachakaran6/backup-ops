@@ -71,8 +71,9 @@ The following supplementary architecture and engineering specifications guide pl
 | [prompt-templates.md](./prompt-templates.md) | Complete | Operational UI/UX guidance & prompt templates |
 | [tui.md](./tui.md) | Complete | Terminal UI architecture & command-line interface |
 | [keybindings.md](./keybindings.md) | Complete | Keyboard shortcut configuration across web & TUI |
-| packages.md | Planned | Shared monorepo package ecosystem |
-| environment-variables.md | Planned | Platform configuration & environment reference |
+| [packages.md](./packages.md) | Complete | Shared monorepo package ecosystem |
+| [environment-variables.md](./environment-variables.md) | Complete | Platform configuration & environment reference |
+| [architecture-decisions.md](./architecture-decisions.md) | Complete | Architecture Decision Records (ADR log) |
 
 ## Repository Structure
 
