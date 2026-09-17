@@ -2,8 +2,10 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - 'bcrypt'
-  - 'esbuild'
-  - 'msgpackr-extract'
+strictDepBuilds: false
+
+allowBuilds:
+  '@swc/core': true
+  bcrypt: true
+  esbuild: true
+  msgpackr-extract: true
