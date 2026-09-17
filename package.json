@@ -1,0 +1,26 @@
+{
+  "name": "backup-ops-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BackupOps — Self-hosted infrastructure data operations and backup orchestration platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm -r run dev",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "type-check": "pnpm -r run type-check",
+    "clean": "pnpm -r run clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@11.9.0"
+}
