@@ -115,9 +115,9 @@ export class JobService {
 
     job.state = JobState.QUEUED;
     job.retryCount += 1;
-    job.error = null;
-    job.startedAt = null;
-    job.finishedAt = null;
+    job.error = undefined;
+    job.startedAt = undefined;
+    job.finishedAt = undefined;
     job.progress.percentage = 0;
     job.progress.currentStep = 'Retry queued';
     job.logs.push({

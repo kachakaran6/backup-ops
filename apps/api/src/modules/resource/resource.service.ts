@@ -76,7 +76,7 @@ export class ResourceService {
         const latencyMs = Date.now() - start;
         resource.status = ResourceHealthStatus.HEALTHY;
         resource.lastCheckedAt = new Date();
-        resource.lastError = null;
+        resource.lastError = undefined;
         await this.resourceRepo.save(resource);
 
         return {
@@ -111,7 +111,7 @@ export class ResourceService {
         const latencyMs = Date.now() - start;
         resource.status = ResourceHealthStatus.HEALTHY;
         resource.lastCheckedAt = new Date();
-        resource.lastError = null;
+        resource.lastError = undefined;
         await this.resourceRepo.save(resource);
 
         return {
