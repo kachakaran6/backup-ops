@@ -25,6 +25,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug",
     "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
