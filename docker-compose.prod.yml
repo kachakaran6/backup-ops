@@ -1,0 +1,125 @@
+version: '3.8'
+
+name: backup-ops
+
+# ────────────────────────────────────────────────────────────────────────────
+# BackupOps Production — Docker Compose
+# Deployed via Coolify — builds from source in the repository
+# ────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: backup-ops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: backup_ops
+      POSTGRES_USER: backup_ops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backup-ops-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "backup_ops", "-d", "backup_ops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: backup-ops-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backup-ops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API (NestJS Control Plane) ────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: backup-ops-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://backup_ops:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/backup_ops
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-change-encryption-key-prod}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backup-ops-network
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Web (React/Vite → nginx) ──────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: backup-ops-web
+    restart: unless-stopped
+    networks:
+      - backup-ops-network
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Worker (BullMQ) ───────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: backup-ops-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://backup_ops:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/backup_ops
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backup-ops-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  backup-ops-network:
+    driver: bridge

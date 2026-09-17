@@ -1,0 +1,41 @@
+name: BackupOps Deploy
+
+on:
+  workflow_run:
+    workflows: ["BackupOps CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: false
+        default: 'production'
+
+jobs:
+  deploy:
+    name: Deploy to Coolify
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Trigger Coolify Deployment
+        run: |
+          echo "Triggering Coolify deployment for application 9yldkq6a5aaziikfklkgxtwn"
+          response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+            -H "Accept: application/json" \
+            "https://coolify.kachakaran.tech/api/v1/deploy?uuid=9yldkq6a5aaziikfklkgxtwn&force=false")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+          
+          if [ "$http_code" != "200" ] && [ "$http_code" != "201" ]; then
+            echo "Deployment trigger failed with status $http_code"
+            exit 1
+          fi
+          
+          echo "Deployment triggered successfully!"
