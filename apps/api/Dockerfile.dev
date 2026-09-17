@@ -1,0 +1,25 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies for dev tools
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci --prefer-offline --no-audit
+
+# Copy source code
+COPY . /app
+
+# Build the application
+RUN npm run build
+
+# Remove dev dependencies for production
+RUN npm prune --production
+
+EXPOSE 3000
+
+CMD ["node", "dist/main"]
