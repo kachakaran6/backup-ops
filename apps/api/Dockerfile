@@ -20,7 +20,7 @@ RUN pnpm --filter @backup-ops/types build 2>/dev/null || true
 RUN pnpm --filter @backup-ops/config build 2>/dev/null || true
 RUN pnpm --filter backup-ops-api build
 
-RUN pnpm --filter backup-ops-api deploy --prod /prod/api
+RUN pnpm --filter backup-ops-api deploy --legacy --prod /prod/api
 
 # ---- Production stage ----
 FROM node:22-alpine AS production
