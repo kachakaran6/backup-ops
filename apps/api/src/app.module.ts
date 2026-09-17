@@ -22,13 +22,13 @@ import { HealthModule } from './modules/health/health.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const dbUrl = config.get<string>('DATABASE_URL');
+        const shouldSync = config.get<string>('DB_SYNCHRONIZE') === 'true' || config.get<string>('NODE_ENV') !== 'production';
         if (dbUrl) {
           return {
             type: 'postgres',
             url: dbUrl,
             autoLoadEntities: true,
-            synchronize: config.get('NODE_ENV') !== 'production',
+            synchronize: shouldSync,
           };
         }
         return {
@@ -39,7 +39,7 @@ import { HealthModule } from './modules/health/health.module';
           password: config.get<string>('POSTGRES_PASSWORD', 'backup_ops_password'),
           database: config.get<string>('POSTGRES_DB', 'backup_ops'),
           autoLoadEntities: true,
-          synchronize: config.get('NODE_ENV') !== 'production',
+          synchronize: shouldSync,
         };
       },
     }),

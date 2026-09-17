@@ -59,6 +59,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-change-encryption-key-prod}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,8 +67,13 @@ services:
         condition: service_healthy
     networks:
       - backup-ops-network
-    ports:
-      - "3000:3000"
+      - coolify
+    expose:
+      - "3000"
+    labels:
+      - "caddy=https://backupops-api.kachakaran.me, http://backupops-api.kachakaran.me, http://backupops-api.141.148.214.132.sslip.io"
+      - "caddy.reverse_proxy={{upstreams 3000}}"
+      - "caddy.networks=coolify"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/v1/health"]
       interval: 30s
@@ -84,8 +90,13 @@ services:
     restart: unless-stopped
     networks:
       - backup-ops-network
-    ports:
-      - "80:80"
+      - coolify
+    expose:
+      - "80"
+    labels:
+      - "caddy=https://backupops.kachakaran.me, http://backupops.kachakaran.me, https://backupops.kachakaran.tech, http://backupops.kachakaran.tech, http://backupops.141.148.214.132.sslip.io"
+      - "caddy.reverse_proxy={{upstreams 80}}"
+      - "caddy.networks=coolify"
     depends_on:
       - api
     healthcheck:
@@ -123,3 +134,6 @@ volumes:
 networks:
   backup-ops-network:
     driver: bridge
+  coolify:
+    name: coolify
+    external: true
