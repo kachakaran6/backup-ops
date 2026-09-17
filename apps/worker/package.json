@@ -1,0 +1,24 @@
+{
+  "name": "backup-ops-worker",
+  "version": "0.1.0",
+  "description": "BackupOps Asynchronous Job Worker",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^4.9.0",
+    "redis": "^4.6.9",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.2.0"
+  }
+}
