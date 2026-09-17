@@ -22,6 +22,7 @@ import { HealthModule } from './modules/health/health.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        const dbUrl = config.get<string>('DATABASE_URL');
         const shouldSync = config.get<string>('DB_SYNCHRONIZE') === 'true' || config.get<string>('NODE_ENV') !== 'production';
         if (dbUrl) {
           return {
