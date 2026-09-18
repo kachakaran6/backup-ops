@@ -19,6 +19,9 @@ RUN pnpm --filter backup-ops-api deploy --legacy --prod /prod/api
 # ---- Production stage ----
 FROM node:22-alpine AS production
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 COPY --from=builder /prod/api ./
@@ -29,7 +32,8 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/v1/health || exit 1
+# Extended start_period to allow NestJS + TypeORM schema sync before health checks begin
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=5 \
+  CMD curl -sf http://localhost:3000/api/v1/health || exit 1
 
 CMD ["node", "dist/main"]
