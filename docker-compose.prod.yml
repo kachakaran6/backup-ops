@@ -11,7 +11,6 @@ services:
   # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: backup-ops-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: backup_ops
@@ -20,7 +19,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - backup-ops-network
+      backup-ops-network:
+        aliases:
+          - postgres
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "backup_ops", "-d", "backup_ops"]
       interval: 10s
@@ -31,13 +32,14 @@ services:
   # ── Redis ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: backup-ops-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     networks:
-      - backup-ops-network
+      backup-ops-network:
+        aliases:
+          - redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -49,7 +51,6 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: backup-ops-api
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -70,8 +71,10 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - backup-ops-network
-      - coolify
+      backup-ops-network:
+        aliases:
+          - api
+      coolify:
     expose:
       - "3000"
     labels:
@@ -90,11 +93,12 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: backup-ops-web
     restart: unless-stopped
     networks:
-      - backup-ops-network
-      - coolify
+      backup-ops-network:
+        aliases:
+          - web
+      coolify:
     expose:
       - "80"
     labels:
@@ -114,7 +118,6 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-    container_name: backup-ops-worker
     restart: unless-stopped
     environment:
       NODE_ENV: production
