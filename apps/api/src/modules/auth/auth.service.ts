@@ -56,16 +56,37 @@ export class AuthService implements OnApplicationBootstrap {
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD') || 'admin@123';
 
     try {
-      let user = await this.userRepository.findOne({
-        where: [{ email: adminEmail }, { username: 'admin' }],
-      });
+      const userByEmail = await this.userRepository.findOne({ where: { email: adminEmail } });
+      const userByUsername = await this.userRepository.findOne({ where: { username: 'admin' } });
 
-      if (!user) {
-        this.logger.log(`Bootstrapping initial admin account for ${adminEmail}`);
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(adminPassword, salt);
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(adminPassword, salt);
 
-        user = this.userRepository.create({
+      let targetUser: User;
+
+      if (userByEmail && userByUsername && userByEmail.id !== userByUsername.id) {
+        this.logger.log(`Found conflicting admin accounts (id: ${userByEmail.id}, id: ${userByUsername.id}), consolidating into single admin account`);
+        // Remove the orphan email record so userByUsername can take adminEmail safely
+        await this.userRepository.delete(userByEmail.id);
+        userByUsername.email = adminEmail;
+        userByUsername.passwordHash = passwordHash;
+        userByUsername.role = UserRole.SUPER_ADMIN;
+        userByUsername.status = UserStatus.ACTIVE;
+        targetUser = await this.userRepository.save(userByUsername);
+      } else if (userByUsername) {
+        userByUsername.email = adminEmail;
+        userByUsername.passwordHash = passwordHash;
+        userByUsername.role = UserRole.SUPER_ADMIN;
+        userByUsername.status = UserStatus.ACTIVE;
+        targetUser = await this.userRepository.save(userByUsername);
+      } else if (userByEmail) {
+        userByEmail.username = 'admin';
+        userByEmail.passwordHash = passwordHash;
+        userByEmail.role = UserRole.SUPER_ADMIN;
+        userByEmail.status = UserStatus.ACTIVE;
+        targetUser = await this.userRepository.save(userByEmail);
+      } else {
+        const newUser = this.userRepository.create({
           email: adminEmail,
           username: 'admin',
           displayName: 'System Administrator',
@@ -74,39 +95,20 @@ export class AuthService implements OnApplicationBootstrap {
           status: UserStatus.ACTIVE,
           preferences: { theme: 'system', language: 'en', timezone: 'UTC' },
         });
-
-        user = await this.userRepository.save(user);
-        this.logger.log(`Initial admin user successfully bootstrapped with email ${adminEmail}`);
-      } else {
-        // Sync email and ensure password matches configured ADMIN_PASSWORD
-        let passwordMatches = false;
-        try {
-          passwordMatches = await bcrypt.compare(adminPassword, user.passwordHash);
-        } catch {
-          passwordMatches = false;
-        }
-
-        if (!passwordMatches) {
-          this.logger.log(`Updating password for administrator account (${adminEmail})`);
-          const salt = await bcrypt.genSalt(10);
-          user.passwordHash = await bcrypt.hash(adminPassword, salt);
-        }
-
-        user.email = adminEmail;
-        user.status = UserStatus.ACTIVE;
-        user.role = UserRole.SUPER_ADMIN;
-        user = await this.userRepository.save(user);
+        targetUser = await this.userRepository.save(newUser);
       }
+
+      this.logger.log(`Admin account confirmed: email=${targetUser.email}, username=${targetUser.username}, role=${targetUser.role}`);
 
       // Ensure default membership exists for admin
       const org = await this.bootstrapDefaultOrganization();
       const membership = await this.membershipRepository.findOne({
-        where: { organizationId: org.id, userId: user.id },
+        where: { organizationId: org.id, userId: targetUser.id },
       });
       if (!membership) {
         const newMembership = this.membershipRepository.create({
           organizationId: org.id,
-          userId: user.id,
+          userId: targetUser.id,
           role: OrgRole.OWNER,
         });
         await this.membershipRepository.save(newMembership);
