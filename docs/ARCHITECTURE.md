@@ -104,6 +104,12 @@ BackupProvider
 ├── PostgreSQLBackupProvider # Logical + physical backup
 ├── MySQLBackupProvider      # Logical backup
 └── FilesystemBackupProvider # File-level backup
+
+NotificationProvider
+├── SmtpProvider             # Email alerts via TLS/STARTTLS
+├── TelegramProvider         # Telegram Bot API markdown alerts
+├── PushoverProvider         # Mobile push alerts
+└── GotifyProvider           # Self-hosted Gotify stream alerts
 ```
 
 Provider-specific behavior is encapsulated inside adapters. The domain layer uses interfaces.
@@ -210,6 +216,10 @@ User
 │   ├── Job
 │   │   ├── JobStep
 │   │   └── JobCheckpoint
+│   │
+│   ├── NotificationIntegration
+│   │   ├── NotificationRule
+│   │   └── NotificationDelivery
 │   │
 │   └── AuditLog
 ```

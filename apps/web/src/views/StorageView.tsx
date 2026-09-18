@@ -2,17 +2,16 @@ import React, { useState } from 'react';
 import {
   HardDrive,
   Plus,
-  RefreshCw,
   Folder,
   Cloud,
-  CheckCircle2,
-  AlertTriangle,
   Trash2,
   X,
-  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { StorageDestination, StorageType } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
+import { StatusIndicator } from '../components/common/StatusIndicator';
 import * as api from '../services/api';
 
 interface StorageViewProps {
@@ -90,16 +89,19 @@ export const StorageView: React.FC<StorageViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Action Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Storage Pools & Destinations</h3>
-          <p className="text-xs text-zinc-400">
+          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
+            <HardDrive className="w-4 h-4 text-text-muted" />
+            Storage Pools & Destinations
+          </h3>
+          <p className="text-xs text-text-muted mt-0.5">
             Local mounted filesystems, S3 buckets, and MinIO storage connected for backup storage and synchronization.
           </p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+          className="op-btn-primary self-start sm:self-auto"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Storage Destination</span>
@@ -117,44 +119,30 @@ export const StorageView: React.FC<StorageViewProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {storageDestinations.map((dest) => {
-            const isConnected = dest.status === 'connected';
             const isLocal = dest.type === 'local';
             return (
               <div
                 key={dest.id}
-                className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 space-y-4"
+                className="op-card p-4 space-y-3"
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2.5 rounded-lg border ${
-                        isConnected
-                          ? 'bg-amber-950/30 border-amber-800/40 text-amber-400'
-                          : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-                      }`}
-                    >
-                      {isLocal ? <Folder className="w-5 h-5" /> : <Cloud className="w-5 h-5" />}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 rounded-md bg-surface-secondary border border-border text-text-muted shrink-0">
+                      {isLocal ? <Folder className="w-4 h-4" /> : <Cloud className="w-4 h-4" />}
                     </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-zinc-100">{dest.name}</h4>
-                      <p className="text-xs font-mono text-zinc-400 truncate max-w-[180px]">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-semibold text-text-primary truncate">{dest.name}</h4>
+                      <p className="text-[11px] font-mono text-text-muted truncate">
                         {isLocal ? dest.path : `${dest.bucket} (${dest.region || 'default'})`}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                        isConnected
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                          : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                      }`}
-                    >
-                      {dest.status.toUpperCase()}
-                    </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <StatusIndicator status={dest.status} variant="inline" />
                     <button
                       onClick={() => handleRemove(dest.id)}
-                      className="text-zinc-500 hover:text-rose-400 p-1 rounded transition-colors cursor-pointer"
+                      className="op-btn-ghost !p-1 hover:text-error"
+                      title="Remove"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -162,26 +150,26 @@ export const StorageView: React.FC<StorageViewProps> = ({
                 </div>
 
                 {/* Capacity Stats */}
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800/80 text-[11px] font-mono">
+                <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-border-subtle text-[11px] font-mono">
                   <div>
-                    <span className="text-zinc-500 block text-[10px]">TOTAL CAPACITY</span>
-                    <span className="text-zinc-300 font-semibold">
-                      {dest.totalCapacityBytes ? formatBytes(dest.totalCapacityBytes) : 'Self-hosted Host'}
+                    <span className="text-text-muted block text-[10px]">CAPACITY</span>
+                    <span className="text-text-primary font-medium">
+                      {dest.totalCapacityBytes ? formatBytes(dest.totalCapacityBytes) : 'Host disk'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block text-[10px]">AVAILABLE</span>
-                    <span className="text-emerald-400 font-semibold">
-                      {dest.availableCapacityBytes ? formatBytes(dest.availableCapacityBytes) : 'Available'}
+                    <span className="text-text-muted block text-[10px]">AVAILABLE</span>
+                    <span className="text-text-secondary font-medium">
+                      {dest.availableCapacityBytes ? formatBytes(dest.availableCapacityBytes) : 'Reported by OS'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block text-[10px]">BACKUPS STORED</span>
-                    <span className="text-zinc-300 font-semibold">{dest.backupCount}</span>
+                    <span className="text-text-muted block text-[10px]">BACKUPS</span>
+                    <span className="text-text-primary font-medium">{dest.backupCount}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block text-[10px]">VERIFICATION</span>
-                    <span className="text-emerald-400 font-semibold">
+                    <span className="text-text-muted block text-[10px]">VERIFICATION</span>
+                    <span className={dest.lastVerificationAt ? 'text-success font-medium' : 'text-text-muted'}>
                       {dest.lastVerificationAt ? 'Verified' : 'Pending'}
                     </span>
                   </div>
@@ -194,40 +182,40 @@ export const StorageView: React.FC<StorageViewProps> = ({
 
       {/* Add Storage Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-amber-400" />
-                <h3 className="font-semibold text-sm text-zinc-100">Add Storage Destination</h3>
+                <HardDrive className="w-4 h-4 text-text-muted" />
+                <h3 className="font-semibold text-xs text-text-primary">Add Storage Destination</h3>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="text-text-muted hover:text-text-primary cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleCreate} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Storage Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Storage Name</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Local High-Speed Storage"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Destination Type</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Destination Type</label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as StorageType)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input"
                 >
                   <option value="local">Local Filesystem Mount</option>
                   <option value="s3">AWS S3 / S3-Compatible</option>
@@ -238,73 +226,73 @@ export const StorageView: React.FC<StorageViewProps> = ({
 
               {type === 'local' ? (
                 <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Mount Path</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Mount Path</label>
                   <input
                     type="text"
                     required
                     value={path}
                     onChange={(e) => setPath(e.target.value)}
                     placeholder="./data/backups or /mnt/backups"
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                    className="op-input font-mono"
                   />
-                  <p className="text-[11px] text-zinc-500 mt-1">
+                  <p className="text-[11px] text-text-muted mt-1">
                     BackupOps will verify write/read/checksum capabilities on this path.
                   </p>
                 </div>
               ) : (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1">S3 Endpoint URL (Optional for AWS)</label>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">S3 Endpoint URL (Optional for AWS)</label>
                     <input
                       type="text"
                       value={endpoint}
                       onChange={(e) => setEndpoint(e.target.value)}
                       placeholder="minio.internal:9000 or https://s3.amazonaws.com"
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                      className="op-input font-mono"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">Bucket Name</label>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Bucket Name</label>
                       <input
                         type="text"
                         required
                         value={bucket}
                         onChange={(e) => setBucket(e.target.value)}
                         placeholder="company-backups"
-                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                        className="op-input font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">Region</label>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Region</label>
                       <input
                         type="text"
                         value={region}
                         onChange={(e) => setRegion(e.target.value)}
                         placeholder="us-east-1"
-                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                        className="op-input font-mono"
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">Access Key ID</label>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Access Key ID</label>
                       <input
                         type="text"
                         value={accessKeyId}
                         onChange={(e) => setAccessKeyId(e.target.value)}
                         placeholder="AKIA..."
-                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                        className="op-input font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">Secret Access Key</label>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Secret Access Key</label>
                       <input
                         type="password"
                         value={secretAccessKey}
                         onChange={(e) => setSecretAccessKey(e.target.value)}
                         placeholder="Secret key"
-                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                        className="op-input font-mono"
                       />
                     </div>
                   </div>
@@ -313,23 +301,23 @@ export const StorageView: React.FC<StorageViewProps> = ({
 
               {testResult && (
                 <div
-                  className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+                  className={`p-2.5 rounded-md text-xs flex items-center gap-2 ${
                     testResult.success
-                      ? 'bg-emerald-950/30 text-emerald-400 border border-emerald-800/40'
-                      : 'bg-rose-950/30 text-rose-400 border border-rose-800/40'
+                      ? 'bg-success-muted text-success border border-success/30'
+                      : 'bg-error-muted text-error border border-error/30'
                   }`}
                 >
-                  {testResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                   <span>{testResult.message}</span>
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <div className="flex items-center justify-between pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={handleTest}
                   disabled={testing}
-                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-lg border border-zinc-700 transition-colors disabled:opacity-50 cursor-pointer"
+                  className="op-btn-secondary"
                 >
                   {testing ? 'Probing...' : 'Test Storage'}
                 </button>
@@ -337,13 +325,13 @@ export const StorageView: React.FC<StorageViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-3.5 py-1.5 bg-transparent hover:bg-zinc-800 text-zinc-400 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                    className="op-btn-ghost"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                    className="op-btn-primary"
                   >
                     Save Storage
                   </button>

@@ -119,13 +119,11 @@ export class CoolifyService {
 
       // 1. Discover servers
       const coolifyServers = await this.coolifyProvider.listServers(conn.url, token);
-      let serversCount = 0;
-      let databasesCount = 0;
+      const processedDbUuids = new Set<string>();
       let applicationsCount = 0;
       let servicesCount = 0;
 
       for (const cs of coolifyServers) {
-        serversCount++;
         let server = await this.serverRepo.findOne({
           where: {
             organizationId,
@@ -135,23 +133,36 @@ export class CoolifyService {
         });
 
         if (!server) {
-          server = this.serverRepo.create({
-            organizationId,
-            name: cs.name || `Coolify Server ${cs.ip}`,
-            connectionMode: ServerConnectionMode.COOLIFY,
-            coolifyConnectionId: conn.id,
-            coolifyServerUuid: cs.uuid,
-            host: cs.ip,
-            port: cs.port || 22,
-            username: cs.user || 'root',
-            status: cs.is_reachable ? ServerStatus.ONLINE : ServerStatus.OFFLINE,
-            dockerInstalled: true, // Coolify servers are Docker hosts
-            lastHeartbeatAt: new Date(),
-            metadata: {
-              description: cs.description,
-              isUsable: cs.is_usable,
+          // Check if host already exists in organization
+          server = await this.serverRepo.findOne({
+            where: {
+              organizationId,
+              host: cs.ip,
             },
           });
+          if (server) {
+            server.coolifyConnectionId = conn.id;
+            server.coolifyServerUuid = cs.uuid;
+            server.connectionMode = ServerConnectionMode.COOLIFY;
+          } else {
+            server = this.serverRepo.create({
+              organizationId,
+              name: cs.name || `Coolify Server ${cs.ip}`,
+              connectionMode: ServerConnectionMode.COOLIFY,
+              coolifyConnectionId: conn.id,
+              coolifyServerUuid: cs.uuid,
+              host: cs.ip,
+              port: cs.port || 22,
+              username: cs.user || 'root',
+              status: cs.is_reachable ? ServerStatus.ONLINE : ServerStatus.OFFLINE,
+              dockerInstalled: true, // Coolify servers are Docker hosts
+              lastHeartbeatAt: new Date(),
+              metadata: {
+                description: cs.description,
+                isUsable: cs.is_usable,
+              },
+            });
+          }
         } else {
           server.name = cs.name || server.name;
           server.host = cs.ip || server.host;
@@ -165,7 +176,7 @@ export class CoolifyService {
         for (const res of resources) {
           const type = (res.type || '').toLowerCase();
           if (type.includes('database') || type.includes('postgres') || type.includes('mysql') || type.includes('mariadb')) {
-            databasesCount++;
+            processedDbUuids.add(res.uuid);
             let dbType = DatabaseType.POSTGRES;
             if (type.includes('mysql')) dbType = DatabaseType.MYSQL;
             if (type.includes('mariadb')) dbType = DatabaseType.MARIADB;
@@ -197,6 +208,8 @@ export class CoolifyService {
                 metadata: res,
               });
             } else {
+              db.serverId = server.id;
+              db.host = server.host;
               db.status = res.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN;
             }
             await this.databaseRepo.save(db);
@@ -208,9 +221,14 @@ export class CoolifyService {
         }
       }
 
-      // Also discover global databases
+      // Also discover global databases (deduplicating against processed server resources)
       const globalDbs = await this.coolifyProvider.listDatabases(conn.url, token);
       for (const gdb of globalDbs) {
+        if (processedDbUuids.has(gdb.uuid)) {
+          continue; // Already reconciled via server resource
+        }
+        processedDbUuids.add(gdb.uuid);
+
         const type = (gdb.type || '').toLowerCase();
         let dbType = DatabaseType.POSTGRES;
         if (type.includes('mysql')) dbType = DatabaseType.MYSQL;
@@ -218,7 +236,7 @@ export class CoolifyService {
         if (type.includes('mongo')) dbType = DatabaseType.MONGODB;
         if (type.includes('redis')) dbType = DatabaseType.REDIS;
 
-        const existing = await this.databaseRepo.findOne({
+        let db = await this.databaseRepo.findOne({
           where: {
             organizationId,
             coolifyConnectionId: conn.id,
@@ -226,9 +244,8 @@ export class CoolifyService {
           },
         });
 
-        if (!existing) {
-          databasesCount++;
-          const db = this.databaseRepo.create({
+        if (!db) {
+          db = this.databaseRepo.create({
             organizationId,
             coolifyConnectionId: conn.id,
             coolifyResourceUuid: gdb.uuid,
@@ -242,11 +259,20 @@ export class CoolifyService {
             recoveryReadiness: DatabaseRecoveryReadiness.UNKNOWN,
             metadata: gdb,
           });
-          await this.databaseRepo.save(db);
+        } else {
+          db.status = gdb.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN;
         }
+        await this.databaseRepo.save(db);
       }
 
-      // 3. Update connection stats
+      // 3. Update connection stats accurately from durable database records
+      const serversCount = await this.serverRepo.count({
+        where: { organizationId, coolifyConnectionId: conn.id },
+      });
+      const databasesCount = await this.databaseRepo.count({
+        where: { organizationId, coolifyConnectionId: conn.id },
+      });
+
       conn.serversDiscovered = serversCount;
       conn.databasesDiscovered = databasesCount;
       conn.applicationsDiscovered = applicationsCount;

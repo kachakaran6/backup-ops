@@ -127,3 +127,62 @@ Retention policies define the lifecycle of backup artifacts:
   - **No Silent Pruning**: Pruning executions are fully auditable with before/after manifests.
   - **Base Backup Protection**: A base backup is never pruned if active incremental / WAL recovery chains depend on it.
   - **Dry-Run Mode**: Operators can preview which files will be deleted before applying pruning rules.
+
+---
+
+## 6. Backup Strategies & Incremental Lineage
+
+BackupOps defines explicit backup strategies tailored to provider capability:
+- **FULL**: Standalone baseline snapshot of all files or database catalog.
+- **INCREMENTAL**: Contains exclusively deltas/changes since the immediately preceding backup in the chain.
+- **DIFFERENTIAL**: Contains all changes accumulated since the initial Base backup.
+- **WAL / PITR**: Continuous PostgreSQL Write-Ahead Log streaming enabling Point-in-Time Recovery down to the exact second.
+- **BINLOG**: MySQL/MariaDB binary transaction log streaming.
+
+### PostgreSQL Recovery Architecture
+```text
+┌──────────────────────┐
+│  BASE BACKUP (Full)  │  <-- Sequence #1 (e.g. 182 GB)
+└──────────┬───────────┘
+           │
+           ├── WAL Segment 001 (Deltas +4.2 GB)  [Seq #2]
+           │
+           ├── WAL Segment 002 (Deltas +1.1 GB)  [Seq #3]
+           │
+           ├── WAL Segment 003 (Deltas +2.7 GB)  [Seq #4]
+           │
+           └── Point-in-Time Recovery Target (Current)
+```
+
+The system visually and architecturally informs the operator that incremental WAL segments depend unconditionally upon the initial base backup.
+
+---
+
+## 7. Backup Chain Integrity & Broken Chain Detection
+
+Every backup record maintains:
+- `parentBackupId`: UUID reference to ancestor backup.
+- `sequenceNumber`: Monotonically increasing sequence within the recovery chain.
+- `checksum`: SHA-256 integrity hash.
+- `isVerified`: Verification status.
+
+### Chain Health States
+1. **HEALTHY**: Base backup is verified, all intermediate sequence numbers exist without gaps, and all checksums match.
+2. **WARNING**: One or more non-critical checksum warnings or storage latency issues detected.
+3. **BROKEN**: Parent backup is missing, intermediate sequence number is missing/corrupted, or ancestor artifact was deleted.
+4. **UNKNOWN**: Chain status pending verification.
+
+If a broken chain is detected:
+- The system visually marks the chain as **BROKEN**.
+- Emits a `backup.chain_broken` domain alert.
+- Automatically prevents unviable restore operations from that broken recovery point.
+
+---
+
+## 8. Chain-Aware Restore Planning
+
+Before any restore execution, the API computes a deterministic **Restore Plan**:
+1. **Target Identification**: Determines the requested target backup record.
+2. **Lineage Reconstruction**: Recursively traverses `parentBackupId` links until reaching the root Base anchor.
+3. **Gap Detection**: Validates sequence numbers `1..N`. If any gap exists, the restore plan returns `canRestore: false` with specific missing sequence details.
+4. **Payload Calculation**: Sums the base size + all incremental delta sizes to provide accurate disk requirement estimates before initiating worker processes.

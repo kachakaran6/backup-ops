@@ -18,7 +18,10 @@ import { DatabaseModule } from './modules/database/database.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { RestoreModule } from './modules/restore/restore.module';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -70,6 +73,13 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     BackupModule,
     RestoreModule,
     MonitoringModule,
+    NotificationModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -58,6 +58,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-change-encryption-key-prod}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@gmail.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin@123}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
     volumes:

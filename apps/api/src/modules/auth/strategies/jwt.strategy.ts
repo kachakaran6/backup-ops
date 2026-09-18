@@ -10,6 +10,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  organizationId?: string;
 }
 
 @Injectable()
@@ -26,11 +27,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<User> {
+  async validate(payload: JwtPayload): Promise<User & { organizationId: string }> {
     const user = await this.userRepository.findOne({ where: { id: payload.sub } });
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User account inactive or not found');
     }
-    return user;
+    return Object.assign(user, { organizationId: payload.organizationId || 'default' });
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Backup, BackupType, BackupVerificationState } from './entities/backup.entity';
@@ -9,6 +9,7 @@ import { Job, JobState } from '../job/entities/job.entity';
 import { TriggerBackupDto } from './dto/trigger-backup.dto';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class BackupService {
@@ -27,6 +28,8 @@ export class BackupService {
     @InjectRepository(Job)
     private jobRepo: Repository<Job>,
     private configService: ConfigService,
+    @Optional()
+    private readonly notificationService?: NotificationService,
   ) {
     const redisUrl = this.configService.get<string>('REDIS_URL');
     try {
@@ -94,7 +97,8 @@ export class BackupService {
       throw new NotFoundException(`Storage destination ${dto.destinationStorageId} not found`);
     }
 
-    // 1. Get or create active BackupChain
+    // 1. Determine Chain and Parentage
+    const requestedType = dto.type || BackupType.FULL;
     let chain = await this.chainRepo.findOne({
       where: {
         organizationId,
@@ -104,13 +108,38 @@ export class BackupService {
       order: { createdAt: 'DESC' },
     });
 
-    if (!chain) {
+    let effectiveType = requestedType;
+    let parentBackupId: string | undefined = undefined;
+    let sequence = 1;
+
+    if (requestedType === BackupType.INCREMENTAL || requestedType === BackupType.WAL) {
+      if (!chain || !chain.baseBackupId) {
+        // Incremental requires a base backup. Start new chain and treat as Full/Base
+        this.logger.warn(`Incremental requested for database ${database.name} without prior Base. Elevating to FULL.`);
+        effectiveType = BackupType.FULL;
+        chain = this.chainRepo.create({
+          organizationId,
+          policyId: dto.policyId,
+          sourceDatabaseId: database.id,
+          sourceServerId: database.serverId,
+          chainNumber: (chain?.chainNumber || 0) + 1,
+          status: BackupChainStatus.HEALTHY,
+          totalSizeBytes: 0,
+          backupCount: 0,
+        });
+        chain = await this.chainRepo.save(chain);
+      } else {
+        parentBackupId = chain.latestBackupId || chain.baseBackupId;
+        sequence = (chain.backupCount || 0) + 1;
+      }
+    } else {
+      // Full/Base starts a fresh chain
       chain = this.chainRepo.create({
         organizationId,
         policyId: dto.policyId,
         sourceDatabaseId: database.id,
         sourceServerId: database.serverId,
-        chainNumber: 1,
+        chainNumber: (chain?.chainNumber || 0) + 1,
         status: BackupChainStatus.HEALTHY,
         totalSizeBytes: 0,
         backupCount: 0,
@@ -150,7 +179,7 @@ export class BackupService {
         {
           timestamp: new Date().toISOString(),
           level: 'info',
-          message: `Backup requested for ${database.name} -> ${storage.name}`,
+          message: `Backup requested (${effectiveType}) for ${database.name} -> ${storage.name}`,
         },
       ],
       startedAt: new Date(),
@@ -166,12 +195,13 @@ export class BackupService {
     const backup = this.backupRepo.create({
       organizationId,
       chainId: chain.id,
+      parentBackupId,
       policyId: dto.policyId,
       sourceDatabaseId: database.id,
       sourceServerId: database.serverId,
       destinationStorageId: storage.id,
-      type: dto.type || BackupType.FULL,
-      sequence: chain.backupCount + 1,
+      type: effectiveType,
+      sequence,
       storagePath,
       sizeBytes: 0,
       checksumSha256: 'pending',
@@ -181,6 +211,22 @@ export class BackupService {
       status: 'running',
     });
     const savedBackup = await this.backupRepo.save(backup);
+
+    // Update chain references
+    if (effectiveType === BackupType.FULL || effectiveType === BackupType.BASE) {
+      chain.baseBackupId = savedBackup.id;
+    }
+    chain.latestBackupId = savedBackup.id;
+    chain.backupCount = sequence;
+    await this.chainRepo.save(chain);
+
+    // Dispatch domain event: backup.started
+    this.notificationService?.dispatchEvent(organizationId, 'backup.started', {
+      backupId: savedBackup.id,
+      database: database.name,
+      type: effectiveType,
+      storage: storage.name,
+    });
 
     // 4. Dispatch to BullMQ worker
     if (this.operationQueue) {
@@ -216,6 +262,110 @@ export class BackupService {
       }
     }
 
-    return this.backupRepo.save(backup);
+    const saved = await this.backupRepo.save(backup);
+
+    // Dispatch domain event: backup.completed
+    this.notificationService?.dispatchEvent(organizationId, 'backup.completed', {
+      backupId: saved.id,
+      databaseId: saved.sourceDatabaseId,
+      type: saved.type,
+      sizeBytes: saved.sizeBytes,
+    });
+
+    return saved;
+  }
+
+  async getRestorePlan(organizationId: string, id: string) {
+    const backup = await this.findOne(organizationId, id);
+
+    let chain: BackupChain | null = null;
+    if (backup.chainId) {
+      chain = await this.chainRepo.findOne({ where: { id: backup.chainId } });
+    }
+
+    // Determine required recovery chain
+    let requiredBackups: Backup[] = [];
+    let chainStatus = 'HEALTHY';
+    let canRestore = true;
+    let brokenReason: string | undefined = undefined;
+
+    if (backup.type === BackupType.FULL || backup.type === BackupType.BASE) {
+      requiredBackups = [backup];
+    } else {
+      // Trace chain from base up to this backup's sequence
+      const chainBackups = await this.backupRepo.find({
+        where: {
+          organizationId,
+          chainId: backup.chainId,
+        },
+        order: { sequence: 'ASC' },
+      });
+
+      // Filter only up to the target backup sequence
+      const relevant = chainBackups.filter((b) => b.sequence <= backup.sequence);
+
+      // Check continuity
+      if (relevant.length === 0 || relevant[0].type !== BackupType.FULL && relevant[0].type !== BackupType.BASE) {
+        chainStatus = 'BROKEN';
+        canRestore = false;
+        brokenReason = 'Missing base backup in recovery chain.';
+      } else {
+        // Verify sequence integrity
+        for (let i = 0; i < relevant.length; i++) {
+          if (relevant[i].sequence !== i + 1) {
+            chainStatus = 'BROKEN';
+            canRestore = false;
+            brokenReason = `Sequence gap detected: expected #${i + 1} but found #${relevant[i].sequence}`;
+            break;
+          }
+          if (relevant[i].status === 'failed' || relevant[i].verificationState === BackupVerificationState.FAILED) {
+            chainStatus = 'BROKEN';
+            canRestore = false;
+            brokenReason = `Backup #${relevant[i].sequence} (${relevant[i].id}) failed verification.`;
+            break;
+          }
+        }
+      }
+
+      requiredBackups = relevant;
+    }
+
+    // Calculate cumulative size and storage locations
+    let totalRestoreSizeBytes = 0;
+    const storageLocations: Array<{
+      sequence: number;
+      type: string;
+      storagePath: string;
+      sizeBytes: number;
+      verificationState: string;
+    }> = [];
+
+    for (const b of requiredBackups) {
+      totalRestoreSizeBytes += Number(b.sizeBytes || 0);
+      storageLocations.push({
+        sequence: b.sequence,
+        type: b.type,
+        storagePath: b.storagePath,
+        sizeBytes: Number(b.sizeBytes || 0),
+        verificationState: b.verificationState,
+      });
+    }
+
+    // Minimum 10s or estimate ~40MB/s
+    const estimatedRestoreTimeSeconds = Math.max(10, Math.ceil(totalRestoreSizeBytes / (40 * 1024 * 1024)));
+
+    return {
+      targetBackup: backup,
+      chain,
+      requiredBackups,
+      totalRestoreSizeBytes,
+      storageLocations,
+      chainStatus,
+      canRestore,
+      brokenReason,
+      estimatedRestoreTimeSeconds,
+      verificationState: backup.verificationState,
+    };
   }
 }
+

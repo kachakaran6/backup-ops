@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   Layers,
-  Activity,
   Server,
   Database,
   HardDrive,
   ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
   RefreshCw,
-  Clock,
   Radio,
 } from 'lucide-react';
 import { DashboardStats } from '../types';
 import * as api from '../services/api';
+import { StatusIndicator } from '../components/common/StatusIndicator';
 
 export const MonitoringView: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -39,76 +35,71 @@ export const MonitoringView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-400" />
-            Infrastructure & Recovery Health Monitoring
+          <h1 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
+            <Layers className="w-4 h-4 text-text-muted" />
+            Infrastructure & Recovery Health
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Real-time control-plane observability, cluster components, database RPO freshness, and backup chain integrity.
+          <p className="text-xs text-text-muted mt-0.5">
+            Real-time control-plane telemetry, service connectivity, and backup recovery chain readiness.
           </p>
         </div>
         <button
           onClick={loadMonitoring}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-medium transition"
+          className="op-btn-secondary self-start sm:self-auto"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-400' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-accent' : 'text-text-muted'}`} />
           <span>Refresh Metrics</span>
         </button>
       </div>
 
       {/* Control Plane Topology Status */}
-      <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-        <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-          <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-          Control Plane Core Services
-        </h3>
+      <div className="op-card p-4 sm:p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
+            <Radio className="w-3.5 h-3.5 text-text-muted" />
+            Control Plane Core Services
+          </h3>
+          <span className="text-[10px] text-text-muted font-mono">Cluster: local-default</span>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="p-3 rounded-md bg-surface-secondary border border-border">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">NestJS API Control Plane</span>
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                <CheckCircle2 className="w-3 h-3" /> ONLINE
-              </span>
+              <span className="text-text-secondary font-medium">NestJS API</span>
+              <StatusIndicator status="online" variant="inline" />
             </div>
-            <div className="mt-2 text-xs font-mono text-zinc-200">HTTP Port 3000</div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">REST /api/v1 healthy</div>
+            <div className="mt-2 text-xs font-mono text-text-primary">HTTP Port 3000</div>
+            <div className="text-[10px] text-text-muted mt-0.5">REST /api/v1 operational</div>
           </div>
 
-          <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80">
+          <div className="p-3 rounded-md bg-surface-secondary border border-border">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">PostgreSQL Metadata DB</span>
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                <CheckCircle2 className="w-3 h-3" /> CONNECTED
-              </span>
+              <span className="text-text-secondary font-medium">Metadata Store</span>
+              <StatusIndicator status="connected" variant="inline" />
             </div>
-            <div className="mt-2 text-xs font-mono text-zinc-200">TypeORM Migrations Active</div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Control-plane persistence</div>
+            <div className="mt-2 text-xs font-mono text-text-primary">PostgreSQL Active</div>
+            <div className="text-[10px] text-text-muted mt-0.5">TypeORM persistence verified</div>
           </div>
 
-          <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80">
+          <div className="p-3 rounded-md bg-surface-secondary border border-border">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">BullMQ Async Queue (Redis)</span>
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                <CheckCircle2 className="w-3 h-3" /> READY
-              </span>
+              <span className="text-text-secondary font-medium">Async Job Queue</span>
+              <StatusIndicator status="ready" variant="inline" />
             </div>
-            <div className="mt-2 text-xs font-mono text-zinc-200">Queue: backup-operations</div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Worker streaming active</div>
+            <div className="mt-2 text-xs font-mono text-text-primary">BullMQ (Redis)</div>
+            <div className="text-[10px] text-text-muted mt-0.5">backup-operations queue</div>
           </div>
 
-          <div className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80">
+          <div className="p-3 rounded-md bg-surface-secondary border border-border">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Background Worker</span>
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                <CheckCircle2 className="w-3 h-3" /> LISTENING
-              </span>
+              <span className="text-text-secondary font-medium">Worker Daemon</span>
+              <StatusIndicator status="running" variant="inline" label="Listening" />
             </div>
-            <div className="mt-2 text-xs font-mono text-zinc-200">Streaming / SHA-256 Engine</div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Non-blocking operations</div>
+            <div className="mt-2 text-xs font-mono text-text-primary">Streaming / Checksums</div>
+            <div className="text-[10px] text-text-muted mt-0.5">Asynchronous task processor</div>
           </div>
         </div>
       </div>
@@ -116,94 +107,100 @@ export const MonitoringView: React.FC = () => {
       {/* Domain Pillars Health Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Infrastructure & Servers */}
-        <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+        <div className="op-card p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
             <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-blue-400" />
-              <h3 className="font-semibold text-sm text-zinc-100">Server Infrastructure Health</h3>
+              <Server className="w-4 h-4 text-text-muted" />
+              <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wide">Server Infrastructure</h3>
             </div>
-            <span className="text-xs font-mono text-zinc-400">
+            <span className="text-xs font-mono text-text-muted">
               {stats?.infrastructure.totalServers || 0} Registered
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Online</div>
-              <div className="text-lg font-bold text-emerald-400 font-mono mt-1">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Online</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.infrastructure.onlineServers || 0}
               </div>
+              <div className="text-[10px] text-success font-mono mt-0.5">Healthy</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Offline</div>
-              <div className="text-lg font-bold text-rose-400 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Offline</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.infrastructure.offlineServers || 0}
               </div>
+              <div className="text-[10px] text-text-muted font-mono mt-0.5">Unreachable</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Coolify Synced</div>
-              <div className="text-lg font-bold text-blue-400 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Coolify</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.infrastructure.coolifyInstances || 0}
               </div>
+              <div className="text-[10px] text-accent font-mono mt-0.5">Synced</div>
             </div>
           </div>
         </div>
 
         {/* Database Protection */}
-        <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+        <div className="op-card p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
             <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-emerald-400" />
-              <h3 className="font-semibold text-sm text-zinc-100">Database Protection & RPO Health</h3>
+              <Database className="w-4 h-4 text-text-muted" />
+              <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wide">Database Protection & RPO</h3>
             </div>
-            <span className="text-xs font-mono text-zinc-400">
+            <span className="text-xs font-mono text-text-muted">
               {stats?.databases.totalDatabases || 0} Managed
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Healthy (Within RPO)</div>
-              <div className="text-lg font-bold text-emerald-400 font-mono mt-1">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Within RPO</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.databases.healthyDatabases || 0}
               </div>
+              <div className="text-[10px] text-success font-mono mt-0.5">Protected</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Backup Overdue</div>
-              <div className="text-lg font-bold text-amber-400 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Overdue</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.databases.backupOverdueDatabases || 0}
               </div>
+              <div className="text-[10px] text-warning font-mono mt-0.5">Lag &gt; 24h</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800">
-              <div className="text-[10px] text-zinc-400 uppercase font-medium">Unprotected</div>
-              <div className="text-lg font-bold text-zinc-400 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Unprotected</div>
+              <div className="text-base font-bold text-text-primary font-mono mt-1">
                 {stats?.databases.unprotectedDatabases || 0}
               </div>
+              <div className="text-[10px] text-text-muted font-mono mt-0.5">No policy</div>
             </div>
           </div>
         </div>
 
         {/* Storage Capacity */}
-        <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+        <div className="op-card p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
             <div className="flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-indigo-400" />
-              <h3 className="font-semibold text-sm text-zinc-100">Storage Destination Health</h3>
+              <HardDrive className="w-4 h-4 text-text-muted" />
+              <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wide">Storage Destinations</h3>
             </div>
-            <span className="text-xs font-mono text-zinc-400">
+            <span className="text-xs font-mono text-text-muted">
               {stats?.storage.totalDestinations || 0} Configured
             </span>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-zinc-400">Total Backups Stored:</span>
-              <span className="font-mono text-zinc-200">
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between p-2 rounded bg-surface-secondary border border-border">
+              <span className="text-text-muted">Total Backups Stored:</span>
+              <span className="font-mono text-text-primary font-medium">
                 {stats?.storage.usedCapacityBytes
                   ? `${(stats.storage.usedCapacityBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
                   : '0.00 GB'}
               </span>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-zinc-400">Available Host Disk:</span>
-              <span className="font-mono text-zinc-200">
+            <div className="flex justify-between p-2 rounded bg-surface-secondary border border-border">
+              <span className="text-text-muted">Available Host Capacity:</span>
+              <span className="font-mono text-text-primary font-medium">
                 {stats?.storage.availableCapacityBytes
                   ? `${(stats.storage.availableCapacityBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
                   : 'Reported by OS'}
@@ -213,30 +210,30 @@ export const MonitoringView: React.FC = () => {
         </div>
 
         {/* Recovery Chains */}
-        <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+        <div className="op-card p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <h3 className="font-semibold text-sm text-zinc-100">Backup Chain & Restore Readiness</h3>
+              <ShieldCheck className="w-4 h-4 text-text-muted" />
+              <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wide">Recovery Chain Integrity</h3>
             </div>
-            <span className="text-xs font-mono text-zinc-400">
-              {(stats?.recovery.validChains || 0) + (stats?.recovery.brokenChains || 0)} Chains
+            <span className="text-xs font-mono text-text-muted">
+              {(stats?.recovery.validChains || 0) + (stats?.recovery.brokenChains || 0)} Lineages
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center">
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-              <div className="text-[10px] text-emerald-400 uppercase font-medium">Valid Recovery Chains</div>
-              <div className="text-xl font-bold text-emerald-300 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Valid Chains</div>
+              <div className="text-lg font-bold text-text-primary font-mono mt-1">
                 {stats?.recovery.validChains || 0}
               </div>
-              <div className="text-[10px] text-zinc-400 mt-0.5">Verified Base + WAL available</div>
+              <div className="text-[10px] text-success font-mono mt-0.5">Base + WAL ready</div>
             </div>
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
-              <div className="text-[10px] text-rose-400 uppercase font-medium">Broken / Incomplete Chains</div>
-              <div className="text-xl font-bold text-rose-300 font-mono mt-1">
+            <div className="p-3 rounded-md bg-surface-secondary border border-border">
+              <div className="text-[10px] text-text-muted uppercase font-medium">Broken Chains</div>
+              <div className="text-lg font-bold text-text-primary font-mono mt-1">
                 {stats?.recovery.brokenChains || 0}
               </div>
-              <div className="text-[10px] text-zinc-400 mt-0.5">Missing base or corrupted WAL</div>
+              <div className="text-[10px] text-error font-mono mt-0.5">Missing ancestor</div>
             </div>
           </div>
         </div>

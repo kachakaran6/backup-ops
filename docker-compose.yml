@@ -57,6 +57,9 @@ services:
       BACKUP_OPS_JWT_SECRET: ${BACKUP_OPS_JWT_SECRET:-your-secret-key-change-in-production}
       BACKUP_OPS_API_KEY: ${BACKUP_OPS_API_KEY:-your-api-key-change-in-production}
       BACKUP_OPS_ENCRYPTION_KEY: ${BACKUP_OPS_ENCRYPTION_KEY:-your-encryption-key-change-in-production}
+      ENCRYPTION_KEY: ${BACKUP_OPS_ENCRYPTION_KEY:-your-encryption-key-change-in-production}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@gmail.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin@123}
       BACKUP_OPS_AGENT_ENDPOINT: http://agent:8080
     volumes:
       - ./apps/api/src:/app/src

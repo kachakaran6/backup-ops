@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 export enum DatabaseType {
@@ -35,6 +36,7 @@ export enum DatabaseRecoveryReadiness {
 }
 
 @Entity('databases')
+@Index(['organizationId', 'coolifyConnectionId', 'coolifyResourceUuid'], { unique: true })
 export class Database {
   @PrimaryGeneratedColumn('uuid')
   id: string;

@@ -285,3 +285,61 @@ export interface DashboardStats {
     brokenChains: number;
   };
 }
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  role: string;
+  organizationId?: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: AuthUser;
+}
+
+export type NotificationProviderType = 'smtp' | 'telegram' | 'pushover' | 'gotify';
+export type NotificationStatus = 'connected' | 'untested' | 'failed' | 'disabled';
+
+export interface NotificationIntegration {
+  id: string;
+  organizationId: string;
+  provider: NotificationProviderType;
+  name: string;
+  config: Record<string, any>;
+  enabled: boolean;
+  status: NotificationStatus;
+  lastTestAt?: string;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationRule {
+  id: string;
+  organizationId: string;
+  event: string;
+  enabled: boolean;
+  integrationIds: string[];
+  cooldownMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationDelivery {
+  id: string;
+  organizationId: string;
+  event: string;
+  integrationId: string;
+  status: 'success' | 'failed';
+  attemptedAt: string;
+  deliveredAt?: string;
+  error?: string;
+  payloadSummary?: string;
+}

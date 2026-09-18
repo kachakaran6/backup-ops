@@ -84,19 +84,25 @@ CREATE TABLE coolify_connections (
 );
 ```
 
-## Sync Behavior
+## Sync Behavior & Idempotency
 
 - **Manual sync**: User clicks "Sync Now" to refresh infrastructure from Coolify
 - **Background sync**: Optional periodic sync (configurable interval, default 15 minutes)
 - **Sync scope**: Reads infrastructure inventory only — does not modify Coolify resources
-- **Conflict resolution**: BackupOps metadata is updated to match Coolify's current state
+- **Idempotent Reconciliation**: Running sync 1 time or 100 times produces the exact same server and database set without duplicates.
+- **Resource Identity & Deduplication**:
+  - Coolify servers are reconciled by composite key `(organizationId, coolifyConnectionId, coolifyServerUuid)` as well as `(organizationId, host, port)`.
+  - Coolify databases are reconciled by composite key `(organizationId, coolifyConnectionId, coolifyResourceUuid)`.
+  - Existing records are updated with latest metadata (CPU, RAM, status, uptime, names) rather than blindly inserted.
+  - Safe duplicate removal reassigns all child database, backup, and credential relationships to the canonical record before removing redundant rows.
+- **Persistent Counts**: Database counts and discovery metrics are computed directly from persisted canonical entities.
 
 ## Discovered Resources
 
-When Coolify discovers a PostgreSQL database, BackupOps creates:
+When Coolify discovers a PostgreSQL database, BackupOps creates or reconciles:
 
-1. A **Server** record linked to the Coolify server
-2. A **Database** record linked to the discovered PostgreSQL instance
+1. A **Server** record linked to the Coolify server (unique by Coolify UUID and IP/port)
+2. A **Database** record linked to the discovered PostgreSQL instance (unique by resource UUID)
 3. The database is marked as `discovered` — not `protected` until user configures backup
 
 ## Error Handling
@@ -104,4 +110,4 @@ When Coolify discovers a PostgreSQL database, BackupOps creates:
 - Connection timeout: Report as `connection_failed` status
 - Invalid token: Report as `authentication_failed`
 - Rate limiting: Respect Coolify API rate limits, retry with backoff
-- Partial failure: If some resources fail to sync, report partial success
+- Partial failure: If some resources fail to sync, report partial success without leaving orphaned or duplicate records.

@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 export enum ServerConnectionMode {
@@ -20,6 +21,8 @@ export enum ServerStatus {
 }
 
 @Entity('servers')
+@Index(['organizationId', 'coolifyConnectionId', 'coolifyServerUuid'], { unique: true })
+@Index(['organizationId', 'host', 'port'])
 export class Server {
   @PrimaryGeneratedColumn('uuid')
   id: string;

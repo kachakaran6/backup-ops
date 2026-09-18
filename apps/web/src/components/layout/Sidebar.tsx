@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Server,
@@ -13,25 +14,13 @@ import {
   Key,
   Layers,
   Settings,
+  Bell,
+  X,
 } from 'lucide-react';
 
-export type NavTab =
-  | 'overview'
-  | 'coolify'
-  | 'servers'
-  | 'docker'
-  | 'databases'
-  | 'storage'
-  | 'backups'
-  | 'restore'
-  | 'operations'
-  | 'monitoring'
-  | 'audit'
-  | 'vault';
-
 interface SidebarProps {
-  activeTab: NavTab;
-  onSelectTab: (tab: NavTab) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
   counts?: {
     servers: number;
     databases: number;
@@ -40,125 +29,196 @@ interface SidebarProps {
   };
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, counts }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose, counts }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Close drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const navSections = [
     {
-      title: 'CORE',
+      title: 'OVERVIEW',
       items: [
-        { id: 'overview' as NavTab, label: 'Overview', icon: LayoutDashboard },
+        { path: '/overview', label: 'Overview', icon: LayoutDashboard },
       ],
     },
     {
       title: 'INFRASTRUCTURE',
       items: [
-        { id: 'coolify' as NavTab, label: 'Coolify Integrations', icon: Cloud },
-        { id: 'servers' as NavTab, label: 'Servers', icon: Server, badge: counts?.servers },
-        { id: 'docker' as NavTab, label: 'Docker Hosts', icon: Container },
+        { path: '/infrastructure/coolify', label: 'Coolify', icon: Cloud },
+        { path: '/infrastructure/servers', label: 'Servers', icon: Server, badge: counts?.servers },
+        { path: '/infrastructure/docker', label: 'Docker', icon: Container },
       ],
     },
     {
-      title: 'DATA ASSETS',
+      title: 'DATA',
       items: [
-        { id: 'databases' as NavTab, label: 'Databases', icon: Database, badge: counts?.databases },
-        { id: 'storage' as NavTab, label: 'Storage Destinations', icon: HardDrive },
+        { path: '/databases', label: 'Databases', icon: Database, badge: counts?.databases },
+        { path: '/storage', label: 'Storage', icon: HardDrive },
       ],
     },
     {
-      title: 'PROTECTION & RECOVERY',
+      title: 'PROTECTION',
       items: [
-        { id: 'backups' as NavTab, label: 'Backups & Policies', icon: ShieldCheck, badge: counts?.backups },
-        { id: 'restore' as NavTab, label: 'Restore Center', icon: RotateCcw },
+        { path: '/backups', label: 'Backups', icon: ShieldCheck, badge: counts?.backups },
+        { path: '/restore', label: 'Restore', icon: RotateCcw },
+      ],
+    },
+    {
+      title: 'OPERATIONS',
+      items: [
+        {
+          path: '/operations',
+          label: 'Jobs',
+          icon: Activity,
+          badge: counts?.runningJobs && counts.runningJobs > 0 ? `${counts.runningJobs} running` : undefined,
+          badgeColor: counts?.runningJobs && counts.runningJobs > 0 ? 'bg-warning-muted text-warning border border-warning/30' : undefined,
+        },
       ],
     },
     {
       title: 'OBSERVABILITY',
       items: [
-        {
-          id: 'operations' as NavTab,
-          label: 'Operations & Jobs',
-          icon: Activity,
-          badge: counts?.runningJobs && counts.runningJobs > 0 ? `${counts.runningJobs} running` : undefined,
-          badgeColor: counts?.runningJobs && counts.runningJobs > 0 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : undefined,
-        },
-        { id: 'monitoring' as NavTab, label: 'Health & Recovery', icon: Layers },
-        { id: 'audit' as NavTab, label: 'Audit Log', icon: ScrollText },
+        { path: '/monitoring', label: 'Health', icon: Layers },
+        { path: '/audit', label: 'Audit Logs', icon: ScrollText },
       ],
     },
     {
       title: 'SYSTEM',
       items: [
-        { id: 'vault' as NavTab, label: 'Credential Vault', icon: Key },
+        { path: '/notifications', label: 'Notifications', icon: Bell },
+        { path: '/vault', label: 'Vault', icon: Key },
+        { path: '/settings', label: 'Settings', icon: Settings },
       ],
     },
   ];
 
+  const handleNavClick = (path: string) => {
+    navigate(path);
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  const isItemActive = (path: string) => {
+    if (path === '/overview') {
+      return location.pathname === '/overview' || location.pathname === '/';
+    }
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
   return (
-    <aside className="w-64 bg-zinc-950 border-r border-zinc-800 flex flex-col h-screen select-none shrink-0">
-      {/* Brand Header */}
-      <div className="p-5 border-b border-zinc-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/20">
-            B
-          </div>
-          <div>
-            <h1 className="font-bold text-sm tracking-wide text-zinc-100 uppercase">BackupOps</h1>
-            <p className="text-[11px] text-zinc-400 font-mono">Control Plane v1.0</p>
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 md:hidden transition-opacity"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-surface border-r border-border flex flex-col h-screen select-none transition-transform duration-200 ease-in-out md:static md:w-60 md:h-screen md:translate-x-0 md:z-auto shrink-0 ${
+          isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <Link
+            to="/overview"
+            onClick={onClose}
+            className="flex items-center gap-2.5 text-inherit no-underline"
+          >
+            <div className="w-7 h-7 rounded-md bg-surface-secondary border border-border flex items-center justify-center text-text-primary font-mono font-semibold text-xs shadow-xs">
+              B
+            </div>
+            <div>
+              <h1 className="font-semibold text-xs tracking-wider text-text-primary uppercase">
+                BackupOps
+              </h1>
+              <p className="text-[10px] text-text-muted font-mono">Control Plane</p>
+            </div>
+          </Link>
+
+          {/* Close button on mobile */}
+          <button
+            onClick={onClose}
+            className="p-1 text-text-muted hover:text-text-primary rounded-md md:hidden cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Navigation Sections */}
+        <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
+          {navSections.map((section) => (
+            <div key={section.title}>
+              <div className="text-[10px] font-semibold text-text-muted tracking-wider uppercase px-2 mb-1">
+                {section.title}
+              </div>
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = isItemActive(item.path);
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => handleNavClick(item.path)}
+                      className={`relative w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
+                        isActive
+                          ? 'bg-accent/10 text-accent border border-accent/20 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:bg-accent before:rounded-full'
+                          : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary/60 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pl-1">
+                        <Icon
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            isActive ? 'text-accent' : 'text-text-muted'
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge !== undefined && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ml-1.5 ${
+                            item.badgeColor ||
+                            'bg-surface-elevated text-text-muted border border-border'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer Status */}
+        <div className="p-3 border-t border-border bg-surface-secondary/40 text-[11px] text-text-muted">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
+              <span>Self-Hosted</span>
+            </span>
+            <span className="font-mono text-[10px]">v1.0</span>
           </div>
         </div>
-      </div>
-
-      {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-        {navSections.map((section) => (
-          <div key={section.title}>
-            <div className="text-[10px] font-semibold text-zinc-400 tracking-wider uppercase px-3 mb-2">
-              {section.title}
-            </div>
-            <div className="space-y-1">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onSelectTab(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-blue-600/10 text-blue-400 border border-blue-500/30 font-semibold'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-zinc-400'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.badge !== undefined && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                          item.badgeColor || 'bg-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Footer Info */}
-      <div className="p-3 border-t border-zinc-800/80 bg-zinc-900/30 text-[11px] text-zinc-400">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Self-Hosted Mode
-          </span>
-          <span className="font-mono text-[10px]">Docker</span>
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };

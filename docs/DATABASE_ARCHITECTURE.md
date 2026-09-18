@@ -106,3 +106,11 @@ FROM pg_stat_archiver;
    GRANT pg_read_all_data TO backupops_backup;
    ```
 3. **No Credential Echoing**: Database passwords are never included in job execution logs or frontend responses.
+
+---
+
+## 6. Database Resource Deduplication & Identity Integrity
+
+To prevent duplicate database listings when synchronizing from Coolify or scanning infrastructure:
+- **Composite Unique Index**: `UNIQUE(organizationId, coolifyConnectionId, coolifyResourceUuid)` ensures that repeated sync executions reconcile existing database records rather than inserting duplicate rows.
+- **Child Entity Protection**: Before any redundant database record could ever be pruned, all historical backup runs, restore points, and audit logs are safely reconciled to the canonical database entity.

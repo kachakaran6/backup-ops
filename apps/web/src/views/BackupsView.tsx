@@ -2,42 +2,47 @@ import React, { useState } from 'react';
 import {
   ShieldCheck,
   Play,
-  Plus,
   RefreshCw,
   RotateCcw,
   CheckCircle2,
-  Clock,
-  HardDrive,
-  Database,
   X,
-  Lock,
+  GitCommit,
+  Layers,
+  ArrowRight,
 } from 'lucide-react';
 import { Backup, BackupChain, Database as DatabaseType, StorageDestination, Policy } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
-import * as api from '../services/api';
+import { BackupChainVisualizer } from '../components/backups/BackupChainVisualizer';
+import { StatusIndicator } from '../components/common/StatusIndicator';
+import { useControlPlane } from '../context/ControlPlaneContext';
+import { api } from '../services/api';
 
 interface BackupsViewProps {
-  backups: Backup[];
-  chains: BackupChain[];
-  databases: DatabaseType[];
-  storageDestinations: StorageDestination[];
-  policies: Policy[];
-  onRefresh: () => void;
-  onRestore: (backup: Backup) => void;
+  backups?: Backup[];
+  chains?: BackupChain[];
+  databases?: DatabaseType[];
+  storageDestinations?: StorageDestination[];
+  policies?: Policy[];
+  onRefresh?: () => void;
+  onRestore?: (backup: Backup) => void;
 }
 
-export const BackupsView: React.FC<BackupsViewProps> = ({
-  backups,
-  chains,
-  databases,
-  storageDestinations,
-  policies,
-  onRefresh,
-  onRestore,
-}) => {
+export const BackupsView: React.FC<BackupsViewProps> = (props) => {
+  const context = useControlPlane();
+  const backups = props.backups || context.backups;
+  const chains = props.chains || context.chains;
+  const databases = props.databases || context.databases;
+  const storageDestinations = props.storageDestinations || context.storageDestinations;
+  const onRefresh = props.onRefresh || context.refresh;
+  const onRestore = props.onRestore || ((b: Backup) => {
+    window.location.href = `/restore?backupId=${b.id}`;
+  });
+
+  const [activeTab, setActiveTab] = useState<'chains' | 'list'>('chains');
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const [selectedDbId, setSelectedDbId] = useState(databases[0]?.id || '');
   const [selectedStorageId, setSelectedStorageId] = useState(storageDestinations[0]?.id || '');
+  const [backupStrategy, setBackupStrategy] = useState<'full' | 'incremental' | 'wal'>('full');
   const [compression, setCompression] = useState<'none' | 'gzip' | 'zstd'>('zstd');
   const [encryption, setEncryption] = useState<'none' | 'aes_256_gcm'>('aes_256_gcm');
   const [triggering, setTriggering] = useState(false);
@@ -46,20 +51,30 @@ export const BackupsView: React.FC<BackupsViewProps> = ({
     e.preventDefault();
     if (!selectedDbId || !selectedStorageId) return;
     setTriggering(true);
-    await api.triggerBackup({
-      sourceDatabaseId: selectedDbId,
-      destinationStorageId: selectedStorageId,
-      compression,
-      encryption,
-    });
-    setTriggering(false);
-    setShowTriggerModal(false);
-    onRefresh();
+    try {
+      await api.backups.trigger({
+        sourceDatabaseId: selectedDbId,
+        destinationStorageId: selectedStorageId,
+        type: backupStrategy,
+        compression,
+        encryption,
+      });
+      setShowTriggerModal(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Trigger failed: ${err.message}`);
+    } finally {
+      setTriggering(false);
+    }
   };
 
   const handleVerify = async (id: string) => {
-    await api.verifyBackup(id);
-    onRefresh();
+    try {
+      await api.backups.verify(id);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Verification failed: ${err.message}`);
+    }
   };
 
   const formatBytes = (bytes: number) => {
@@ -67,148 +82,306 @@ export const BackupsView: React.FC<BackupsViewProps> = ({
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   };
+
+  // Group backups by chain
+  const chainMap = new Map<string, Backup[]>();
+  backups.forEach((b) => {
+    const key = b.chainId || 'standalone';
+    if (!chainMap.has(key)) chainMap.set(key, []);
+    chainMap.get(key)!.push(b);
+  });
 
   return (
     <div className="space-y-6">
-      {/* Top action bar */}
-      <div className="flex items-center justify-between">
+      {/* Top Banner & Trigger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 op-card p-4 sm:p-5">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Backup Policies & Artifacts</h3>
-          <p className="text-xs text-zinc-400">
-            Policy-driven database protection, verification checkpoints, and retained backup archives.
+          <h2 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-text-muted" />
+            Backup Policies & Incremental Recovery Chains
+          </h2>
+          <p className="text-xs text-text-muted mt-0.5 max-w-2xl">
+            Deterministic recovery lineages with Base snapshot anchors, incremental delta blocks, and Point-In-Time Recovery (PITR) WAL segments.
           </p>
         </div>
+
         <button
           onClick={() => {
-            if (databases.length > 0) setSelectedDbId(databases[0].id);
-            if (storageDestinations.length > 0) setSelectedStorageId(storageDestinations[0].id);
+            if (databases.length > 0 && !selectedDbId) setSelectedDbId(databases[0].id);
+            if (storageDestinations.length > 0 && !selectedStorageId) setSelectedStorageId(storageDestinations[0].id);
             setShowTriggerModal(true);
           }}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+          className="op-btn-primary self-start sm:self-auto"
         >
           <Play className="w-3.5 h-3.5" />
           <span>Trigger Backup Job</span>
         </button>
       </div>
 
-      {/* Backup History Table / List */}
-      <div className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold text-zinc-200 uppercase tracking-wide">
-            Retained Backup Archives ({backups.length})
-          </h4>
-          <span className="text-[11px] font-mono text-zinc-500">AES-256-GCM Encrypted</span>
+      {/* Navigation Switcher: Chains vs Artifact List */}
+      <div className="flex items-center justify-between border-b border-border pb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('chains')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'chains'
+                ? 'bg-surface-elevated text-text-primary border-border-strong'
+                : 'text-text-muted hover:text-text-secondary border-transparent'
+            }`}
+          >
+            <GitCommit className="w-3.5 h-3.5" />
+            <span>Recovery Chains ({chainMap.size})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer border ${
+              activeTab === 'list'
+                ? 'bg-surface-elevated text-text-primary border-border-strong'
+                : 'text-text-muted hover:text-text-secondary border-transparent'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>All Backup Artifacts ({backups.length})</span>
+          </button>
         </div>
 
-        {backups.length === 0 ? (
-          <EmptyState
-            icon={ShieldCheck}
-            title="No backups executed yet"
-            description="Trigger an immediate backup or configure a recurring backup policy to start protecting your database workloads."
-            actionText="Trigger Backup Job"
-            onAction={() => setShowTriggerModal(true)}
-          />
-        ) : (
-          <div className="space-y-2">
-            {backups.map((backup) => (
-              <div
-                key={backup.id}
-                className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/60 text-blue-400 text-[10px] font-bold uppercase">
-                      {backup.type}
-                    </span>
-                    <span className="font-semibold text-zinc-200 text-xs truncate max-w-sm">
-                      {backup.storagePath}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px] text-zinc-400">
-                    <span>Size: {formatBytes(backup.sizeBytes)}</span>
-                    <span>•</span>
-                    <span title={backup.checksumSha256}>
-                      SHA-256: {backup.checksumSha256?.slice(0, 16)}...
-                    </span>
-                    <span>•</span>
-                    <span>{new Date(backup.createdAt).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <span
-                    className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border ${
-                      backup.verificationState === 'checksum_verified'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{backup.verificationState}</span>
-                  </span>
-
-                  <button
-                    onClick={() => handleVerify(backup.id)}
-                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[11px] font-medium transition-colors cursor-pointer"
-                  >
-                    Verify
-                  </button>
-
-                  <button
-                    onClick={() => onRestore(backup)}
-                    className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Restore</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary !p-1.5"
+          title="Refresh"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+        </button>
       </div>
 
-      {/* Trigger Modal */}
+      {/* Tab 1: Recovery Chains Visualization */}
+      {activeTab === 'chains' && (
+        <div className="space-y-4">
+          {chainMap.size === 0 ? (
+            <EmptyState
+              icon={GitCommit}
+              title="No recovery chains established yet"
+              description="Trigger a Full base backup to start an incremental recovery lineage for your database workloads."
+              actionText="Trigger Backup Job"
+              onAction={() => setShowTriggerModal(true)}
+            />
+          ) : (
+            Array.from(chainMap.entries()).map(([chainId, chainBackups], idx) => {
+              const matchedChain = chains.find((c) => c.id === chainId);
+              const db = databases.find((d) => d.id === chainBackups[0]?.sourceDatabaseId);
+
+              return (
+                <BackupChainVisualizer
+                  key={chainId}
+                  chainNumber={matchedChain?.chainNumber || idx + 1}
+                  status={matchedChain?.status || 'healthy'}
+                  databaseName={db?.name || 'Database'}
+                  backups={chainBackups}
+                  onRestoreFromBackup={onRestore}
+                />
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Tab 2: Artifacts Table */}
+      {activeTab === 'list' && (
+        <div className="op-card p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+              Retained Backup Artifacts ({backups.length})
+            </h4>
+            <span className="text-[11px] font-mono text-text-muted">AES-256-GCM Encrypted at rest</span>
+          </div>
+
+          {backups.length === 0 ? (
+            <EmptyState
+              icon={ShieldCheck}
+              title="No backups executed yet"
+              description="Trigger an immediate backup or configure a recurring backup policy to protect database workloads."
+              actionText="Trigger Backup Job"
+              onAction={() => setShowTriggerModal(true)}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="op-table">
+                <thead>
+                  <tr>
+                    <th>Type &amp; Seq</th>
+                    <th>Storage Path</th>
+                    <th>Parent Link</th>
+                    <th>Size / Delta</th>
+                    <th>Verification</th>
+                    <th>Created</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono">
+                  {backups.map((backup) => (
+                    <tr key={backup.id}>
+                      <td className="whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              backup.type === 'full' || backup.type === 'base'
+                                ? 'bg-accent/15 text-accent border border-accent/25'
+                                : 'bg-surface-elevated text-text-secondary border border-border'
+                            }`}
+                          >
+                            {backup.type}
+                          </span>
+                          <span className="text-text-muted text-[11px]">#{backup.sequence || 1}</span>
+                        </div>
+                      </td>
+                      <td className="max-w-xs truncate text-text-primary font-medium" title={backup.storagePath}>
+                        {backup.storagePath.split('/').pop() || backup.storagePath}
+                      </td>
+                      <td className="whitespace-nowrap text-text-muted">
+                        {backup.parentBackupId ? (
+                          <span className="text-accent flex items-center gap-1">
+                            <ArrowRight className="w-3 h-3" />
+                            {backup.parentBackupId.slice(0, 8)}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted italic">Base Root</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap text-text-secondary">
+                        {formatBytes(backup.sizeBytes)}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${
+                            backup.verificationState === 'checksum_verified'
+                              ? 'bg-success-muted text-success border-success/30'
+                              : 'bg-warning-muted text-warning border-warning/30'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          {backup.verificationState}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap text-text-muted text-[11px]">
+                        {new Date(backup.createdAt).toLocaleString()}
+                      </td>
+                      <td className="whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleVerify(backup.id)}
+                            className="op-btn-secondary !text-[11px] !py-1 !px-2"
+                          >
+                            Verify
+                          </button>
+                          <button
+                            onClick={() => onRestore(backup)}
+                            className="op-btn-secondary !text-[11px] !py-1 !px-2.5 flex items-center gap-1"
+                          >
+                            <RotateCcw className="w-3 h-3 text-accent" />
+                            <span>Restore</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trigger Modal with Explicit Strategies */}
       {showTriggerModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-blue-400" />
-                <h3 className="font-semibold text-sm text-zinc-100">Trigger Asynchronous Backup</h3>
+                <ShieldCheck className="w-4 h-4 text-text-muted" />
+                <h3 className="font-semibold text-xs text-text-primary">Trigger Asynchronous Backup</h3>
               </div>
               <button
                 onClick={() => setShowTriggerModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="text-text-muted hover:text-text-primary cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleTrigger} className="space-y-4">
+            <form onSubmit={handleTrigger} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Source Database</label>
+                <label className="block text-text-secondary mb-1">Source Database Workload</label>
                 <select
                   value={selectedDbId}
                   onChange={(e) => setSelectedDbId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input"
                 >
                   {databases.map((db) => (
                     <option key={db.id} value={db.id}>
-                      {db.name} ({db.type} • {db.databaseName})
+                      {db.name} ({db.type.toUpperCase()} • {db.databaseName})
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* Explicit Strategy Selection */}
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Destination Storage</label>
+                <label className="block text-text-secondary mb-1 font-medium">
+                  Backup Strategy
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <label
+                    onClick={() => setBackupStrategy('full')}
+                    className={`p-2.5 rounded-md border cursor-pointer flex flex-col justify-between transition-colors ${
+                      backupStrategy === 'full'
+                        ? 'border-accent bg-accent/10 text-text-primary'
+                        : 'border-border bg-surface-secondary text-text-secondary hover:border-border-strong'
+                    }`}
+                  >
+                    <div className="font-semibold">Full Base</div>
+                    <div className="text-[10px] text-text-muted mt-1 leading-normal">
+                      Complete database snapshot. Starts new lineage anchor.
+                    </div>
+                  </label>
+
+                  <label
+                    onClick={() => setBackupStrategy('incremental')}
+                    className={`p-2.5 rounded-md border cursor-pointer flex flex-col justify-between transition-colors ${
+                      backupStrategy === 'incremental'
+                        ? 'border-accent bg-accent/10 text-text-primary'
+                        : 'border-border bg-surface-secondary text-text-secondary hover:border-border-strong'
+                    }`}
+                  >
+                    <div className="font-semibold">Incremental</div>
+                    <div className="text-[10px] text-text-muted mt-1 leading-normal">
+                      Changed blocks since previous backup in active chain.
+                    </div>
+                  </label>
+
+                  <label
+                    onClick={() => setBackupStrategy('wal')}
+                    className={`p-2.5 rounded-md border cursor-pointer flex flex-col justify-between transition-colors ${
+                      backupStrategy === 'wal'
+                        ? 'border-accent bg-accent/10 text-text-primary'
+                        : 'border-border bg-surface-secondary text-text-secondary hover:border-border-strong'
+                    }`}
+                  >
+                    <div className="font-semibold">WAL / PITR</div>
+                    <div className="text-[10px] text-text-muted mt-1 leading-normal">
+                      Write-Ahead Log stream segment for Point-In-Time recovery.
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary mb-1">Destination Storage Target</label>
                 <select
                   value={selectedStorageId}
                   onChange={(e) => setSelectedStorageId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input"
                 >
                   {storageDestinations.map((dest) => (
                     <option key={dest.id} value={dest.id}>
@@ -218,46 +391,46 @@ export const BackupsView: React.FC<BackupsViewProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Compression</label>
+                  <label className="block text-text-secondary mb-1">Compression</label>
                   <select
                     value={compression}
                     onChange={(e) => setCompression(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                    className="op-input font-mono"
                   >
-                    <option value="zstd">Zstandard (ZSTD) - Fast & High Ratio</option>
-                    <option value="gzip">Gzip (Standard)</option>
+                    <option value="zstd">Zstandard (ZSTD)</option>
+                    <option value="gzip">Gzip</option>
                     <option value="none">None (Raw stream)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Encryption</label>
+                  <label className="block text-text-secondary mb-1">Encryption Mode</label>
                   <select
                     value={encryption}
                     onChange={(e) => setEncryption(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                    className="op-input font-mono"
                   >
-                    <option value="aes_256_gcm">AES-256-GCM (Encrypted at rest)</option>
+                    <option value="aes_256_gcm">AES-256-GCM</option>
                     <option value="none">None</option>
                   </select>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowTriggerModal(false)}
-                  className="px-3.5 py-1.5 bg-transparent hover:bg-zinc-800 text-zinc-400 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                  className="op-btn-ghost"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={triggering}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                  className="op-btn-primary"
                 >
-                  {triggering ? 'Starting BullMQ Job...' : 'Queue Backup Job'}
+                  {triggering ? 'Queueing in BullMQ...' : 'Queue Backup Operation'}
                 </button>
               </div>
             </form>

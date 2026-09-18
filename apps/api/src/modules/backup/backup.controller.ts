@@ -66,4 +66,14 @@ export class BackupController {
     const organizationId = user?.organizationId || orgIdQuery || 'default';
     return this.backupService.verifyBackup(organizationId, id);
   }
+
+  @Get(':id/restore-plan')
+  async getRestorePlan(
+    @Param('id') id: string,
+    @Query('organizationId') orgIdQuery?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const organizationId = user?.organizationId || orgIdQuery || 'default';
+    return this.backupService.getRestorePlan(organizationId, id);
+  }
 }

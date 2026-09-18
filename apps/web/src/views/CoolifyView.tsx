@@ -3,23 +3,21 @@ import {
   Cloud,
   Plus,
   RefreshCw,
-  Server,
-  Database,
   ExternalLink,
+  Trash2,
+  X,
   CheckCircle2,
   AlertTriangle,
-  Trash2,
-  Check,
-  X,
 } from 'lucide-react';
 import { CoolifyConnection } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
+import { StatusIndicator } from '../components/common/StatusIndicator';
 import * as api from '../services/api';
 
 interface CoolifyViewProps {
   connections: CoolifyConnection[];
   onRefresh: () => void;
-  onNavigateToServer: (serverId: string) => void;
+  onNavigateToServer?: (serverId: string) => void;
 }
 
 export const CoolifyView: React.FC<CoolifyViewProps> = ({
@@ -71,16 +69,19 @@ export const CoolifyView: React.FC<CoolifyViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top action bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Coolify Infrastructure Sources</h3>
-          <p className="text-xs text-zinc-400">
+          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-text-muted" />
+            Coolify Infrastructure Sources
+          </h3>
+          <p className="text-xs text-text-muted mt-0.5">
             Read-only discovery of servers, databases, and Docker workloads from your Coolify instances.
           </p>
         </div>
         <button
           onClick={() => setShowConnectModal(true)}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+          className="op-btn-primary self-start sm:self-auto"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Connect Coolify Instance</span>
@@ -100,50 +101,42 @@ export const CoolifyView: React.FC<CoolifyViewProps> = ({
           {connections.map((conn) => (
             <div
               key={conn.id}
-              className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 space-y-4"
+              className="op-card p-4 sm:p-5 space-y-4"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 rounded-lg bg-blue-950/40 border border-blue-800/40 text-blue-400">
-                    <Cloud className="w-5 h-5" />
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="p-2 rounded-md bg-surface-secondary border border-border text-text-muted shrink-0">
+                    <Cloud className="w-4 h-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-sm text-zinc-100">{conn.name}</h4>
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                          conn.connectionStatus === 'connected'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        }`}
-                      >
-                        {conn.connectionStatus.toUpperCase()}
-                      </span>
+                      <h4 className="font-semibold text-xs text-text-primary truncate">{conn.name}</h4>
+                      <StatusIndicator status={conn.connectionStatus} variant="inline" />
                     </div>
                     <a
                       href={conn.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 mt-0.5"
+                      className="text-xs font-mono text-text-muted hover:text-accent flex items-center gap-1 mt-0.5 truncate"
                     >
-                      <span>{conn.url}</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <span className="truncate">{conn.url}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
                     </a>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-start sm:self-auto">
                   <button
                     onClick={() => handleSync(conn.id)}
                     disabled={syncingId === conn.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-lg border border-zinc-700 transition-colors cursor-pointer"
+                    className="op-btn-secondary"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncingId === conn.id ? 'animate-spin text-blue-400' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingId === conn.id ? 'animate-spin text-accent' : 'text-text-muted'}`} />
                     <span>Sync Now</span>
                   </button>
                   <button
                     onClick={() => handleRemove(conn.id)}
-                    className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                    className="op-btn-ghost !p-1.5 hover:text-error"
                     title="Disconnect"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -152,28 +145,28 @@ export const CoolifyView: React.FC<CoolifyViewProps> = ({
               </div>
 
               {/* Discovery Counters */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-zinc-800/80">
-                <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800/60">
-                  <span className="text-[10px] text-zinc-400 uppercase font-medium">Servers</span>
-                  <div className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-border-subtle">
+                <div className="p-2.5 bg-surface-secondary rounded-md border border-border">
+                  <span className="text-[10px] text-text-muted uppercase font-medium">Servers</span>
+                  <div className="text-base font-semibold text-text-primary font-mono mt-0.5">
                     {conn.serversDiscovered}
                   </div>
                 </div>
-                <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800/60">
-                  <span className="text-[10px] text-zinc-400 uppercase font-medium">Databases</span>
-                  <div className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
+                <div className="p-2.5 bg-surface-secondary rounded-md border border-border">
+                  <span className="text-[10px] text-text-muted uppercase font-medium">Databases</span>
+                  <div className="text-base font-semibold text-text-primary font-mono mt-0.5">
                     {conn.databasesDiscovered}
                   </div>
                 </div>
-                <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800/60">
-                  <span className="text-[10px] text-zinc-400 uppercase font-medium">Applications</span>
-                  <div className="text-lg font-bold text-blue-400 font-mono mt-0.5">
+                <div className="p-2.5 bg-surface-secondary rounded-md border border-border">
+                  <span className="text-[10px] text-text-muted uppercase font-medium">Applications</span>
+                  <div className="text-base font-semibold text-text-primary font-mono mt-0.5">
                     {conn.applicationsDiscovered}
                   </div>
                 </div>
-                <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800/60">
-                  <span className="text-[10px] text-zinc-400 uppercase font-medium">Last Sync</span>
-                  <div className="text-xs font-mono text-zinc-300 mt-1 truncate">
+                <div className="p-2.5 bg-surface-secondary rounded-md border border-border">
+                  <span className="text-[10px] text-text-muted uppercase font-medium">Last Synchronized</span>
+                  <div className="text-xs font-mono text-text-secondary mt-1 truncate">
                     {conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleTimeString() : 'Never'}
                   </div>
                 </div>
@@ -185,80 +178,80 @@ export const CoolifyView: React.FC<CoolifyViewProps> = ({
 
       {/* Connect Modal */}
       {showConnectModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <Cloud className="w-5 h-5 text-blue-400" />
-                <h3 className="font-semibold text-sm text-zinc-100">Connect Coolify Instance</h3>
+                <Cloud className="w-4 h-4 text-text-muted" />
+                <h3 className="font-semibold text-xs text-text-primary">Connect Coolify Instance</h3>
               </div>
               <button
                 onClick={() => setShowConnectModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="text-text-muted hover:text-text-primary cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleConnect} className="space-y-4">
+            <form onSubmit={handleConnect} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Instance Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Instance Name</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Production Coolify"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Coolify URL</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Coolify URL</label>
                 <input
                   type="url"
                   required
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://coolify.mycompany.com"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="op-input font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">API Bearer Token</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">API Bearer Token</label>
                 <input
                   type="password"
                   required
                   value={apiToken}
                   onChange={(e) => setApiToken(e.target.value)}
                   placeholder="Enter Coolify API token"
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-blue-500 font-mono"
+                  className="op-input font-mono"
                 />
-                <p className="text-[11px] text-zinc-500 mt-1">
+                <p className="text-[11px] text-text-muted mt-1">
                   Stored encrypted with AES-256-GCM. Read-only inventory discovery only.
                 </p>
               </div>
 
               {testResult && (
                 <div
-                  className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+                  className={`p-2.5 rounded-md text-xs flex items-center gap-2 ${
                     testResult.success
-                      ? 'bg-emerald-950/30 text-emerald-400 border border-emerald-800/40'
-                      : 'bg-rose-950/30 text-rose-400 border border-rose-800/40'
+                      ? 'bg-success-muted text-success border border-success/30'
+                      : 'bg-error-muted text-error border border-error/30'
                   }`}
                 >
-                  {testResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                   <span>{testResult.message}</span>
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <div className="flex items-center justify-between pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={handleTest}
                   disabled={testing || !url || !apiToken}
-                  className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-lg border border-zinc-700 transition-colors disabled:opacity-50 cursor-pointer"
+                  className="op-btn-secondary"
                 >
                   {testing ? 'Testing...' : 'Test Connection'}
                 </button>
@@ -266,13 +259,13 @@ export const CoolifyView: React.FC<CoolifyViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowConnectModal(false)}
-                    className="px-3.5 py-1.5 bg-transparent hover:bg-zinc-800 text-zinc-400 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                    className="op-btn-ghost"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                    className="op-btn-primary"
                   >
                     Save & Discover
                   </button>

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as net from 'net';
@@ -19,7 +19,7 @@ export interface SshTestResult {
 }
 
 @Injectable()
-export class ServerService {
+export class ServerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ServerService.name);
 
   constructor(
@@ -29,6 +29,50 @@ export class ServerService {
     private databaseRepo: Repository<Database>,
     private credentialService: CredentialService,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      await this.deduplicateServers('default');
+    } catch (err: any) {
+      this.logger.warn(`Server deduplication on bootstrap skipped: ${err.message}`);
+    }
+  }
+
+  async deduplicateServers(organizationId: string): Promise<number> {
+    const servers = await this.serverRepo.find({ where: { organizationId } });
+    const seenByKey = new Map<string, Server>();
+    let removedCount = 0;
+
+    for (const s of servers) {
+      const coolifyKey = s.coolifyServerUuid
+        ? `coolify:${s.coolifyConnectionId || 'none'}:${s.coolifyServerUuid}`
+        : null;
+      const hostKey = s.host ? `host:${s.host}:${s.port || 22}` : null;
+
+      const canonical =
+        (coolifyKey ? seenByKey.get(coolifyKey) : null) ||
+        (hostKey ? seenByKey.get(hostKey) : null);
+
+      if (!canonical) {
+        if (coolifyKey) seenByKey.set(coolifyKey, s);
+        if (hostKey) seenByKey.set(hostKey, s);
+      } else {
+        this.logger.warn(
+          `Found duplicate server: ${s.name} (${s.id}) matching canonical ${canonical.name} (${canonical.id}). Deduplicating...`,
+        );
+
+        // Safely reassign child databases
+        await this.databaseRepo.update({ serverId: s.id }, { serverId: canonical.id });
+        await this.serverRepo.remove(s);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      this.logger.log(`Server deduplication completed: safely removed ${removedCount} duplicate server records.`);
+    }
+    return removedCount;
+  }
 
   async findAll(organizationId: string): Promise<Server[]> {
     return this.serverRepo.find({
@@ -134,6 +178,28 @@ export class ServerService {
       port: dto.port,
       username: dto.username,
     });
+
+    // Check if server with this host and port already exists in organization
+    let existingServer = await this.serverRepo.findOne({
+      where: {
+        organizationId,
+        host: dto.host,
+        port: dto.port || 22,
+      },
+    });
+
+    if (existingServer) {
+      existingServer.name = dto.name;
+      existingServer.username = dto.username;
+      existingServer.credentialId = credentialId || existingServer.credentialId;
+      existingServer.os = testResult.os || existingServer.os;
+      existingServer.arch = testResult.arch || existingServer.arch;
+      existingServer.dockerInstalled = testResult.dockerRunning ?? existingServer.dockerInstalled;
+      existingServer.status = testResult.success ? ServerStatus.ONLINE : ServerStatus.OFFLINE;
+      existingServer.lastHeartbeatAt = new Date();
+      existingServer.tags = dto.tags || existingServer.tags;
+      return this.serverRepo.save(existingServer);
+    }
 
     const server = this.serverRepo.create({
       organizationId,
