@@ -10,7 +10,7 @@ import {
 import { Server as ServerType } from '../types';
 import * as api from '../services/api';
 import { EmptyState } from '../components/common/EmptyState';
-import { StatusIndicator } from '../components/common/StatusIndicator';
+import { StatusBadge } from '../components/common/StatusBadge';
 
 export const DockerView: React.FC = () => {
   const [servers, setServers] = useState<ServerType[]>([]);
@@ -22,22 +22,32 @@ export const DockerView: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      const serverList = await api.fetchServers();
-      setServers(serverList);
-      if (serverList.length > 0) {
-        setSelectedServerId(serverList[0].id);
-        await inspectDocker(serverList[0].id);
+      try {
+        const serverList = await api.fetchServers();
+        setServers(serverList);
+        if (serverList.length > 0) {
+          setSelectedServerId(serverList[0].id);
+          await inspectDocker(serverList[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load server list:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
   }, []);
 
   const inspectDocker = async (serverId: string) => {
     setInspecting(true);
-    const data = await api.fetchServerDocker(serverId);
-    setDockerData(data);
-    setInspecting(false);
+    try {
+      const data = await api.fetchServerDocker(serverId);
+      setDockerData(data);
+    } catch (err) {
+      console.error('Failed to inspect Docker daemon:', err);
+    } finally {
+      setInspecting(false);
+    }
   };
 
   const handleSelectServer = async (serverId: string) => {
@@ -48,30 +58,36 @@ export const DockerView: React.FC = () => {
   const selectedServer = servers.find((s) => s.id === selectedServerId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div>
-        <h1 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
-          <Container className="w-4 h-4 text-text-muted" />
-          Docker Infrastructure &amp; Volume Awareness
-        </h1>
-        <p className="text-xs text-text-muted mt-0.5">
-          Detect and inspect containerized runtimes and volumes across all managed servers.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold text-text-primary tracking-tight">
+              Docker Runtimes &amp; Volume Telemetry
+            </h1>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              {servers.length} hosts probed
+            </span>
+          </div>
+          <p className="text-xs text-text-muted mt-0.5">
+            Detect and inspect containerized runtimes and persistent storage volumes across managed hosts.
+          </p>
+        </div>
       </div>
 
       {/* Architectural Notice */}
-      <div className="op-card p-4 flex items-start gap-3">
-        <Info className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-        <div className="text-xs space-y-1">
+      <div className="op-card p-3.5 flex items-start gap-3 border-l-2 border-l-brand-primary">
+        <Info className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
+        <div className="text-xs space-y-0.5">
           <span className="font-semibold text-text-primary">
-            Architectural Principle: Docker Volume Backups ≠ Database Backups
+            Architectural Principle: Raw Volume Backups ≠ Database Backups
           </span>
-          <p className="text-text-muted leading-relaxed">
-            Backing up raw Docker storage volumes (e.g. <code className="text-text-secondary font-mono">/var/lib/docker/volumes/...</code>)
-            while a database engine is running produces crash-inconsistent files. For PostgreSQL, MySQL, and MariaDB, always orchestrate through our dedicated{' '}
-            <strong className="text-text-primary">Databases Engine</strong> (Base + WAL archiving / PITR or logical dump).
-            Docker volume operations are intended for stateless uploads and configuration assets.
+          <p className="text-text-muted leading-relaxed text-[11px]">
+            Backing up raw Docker storage volumes while database engines are active creates crash-inconsistent states.
+            For PostgreSQL, MySQL, and MariaDB, always orchestrate through our dedicated{' '}
+            <strong className="text-brand-primary">Database Workload Engine</strong> (Base + WAL PITR or logical dumps).
+            Docker volume operations are reserved for stateless uploads and configuration directories.
           </p>
         </div>
       </div>
@@ -80,23 +96,23 @@ export const DockerView: React.FC = () => {
       {servers.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="No Servers Connected"
+          title="No servers connected"
           description="Connect a server via Coolify discovery or direct SSH to discover running Docker daemon instances."
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wider shrink-0">
-              Host:
+              Host Target:
             </span>
             {servers.map((srv) => (
               <button
                 key={srv.id}
                 onClick={() => handleSelectServer(srv.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0 border cursor-pointer ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-colors shrink-0 border cursor-pointer ${
                   selectedServerId === srv.id
-                    ? 'bg-surface-elevated text-text-primary border-border-strong'
-                    : 'bg-surface text-text-muted hover:text-text-secondary border-border'
+                    ? 'bg-surface-elevated text-brand-primary border-brand-primary/40 font-semibold'
+                    : 'bg-surface text-text-muted hover:text-text-primary border-border'
                 }`}
               >
                 <Server className="w-3.5 h-3.5" />
@@ -107,109 +123,117 @@ export const DockerView: React.FC = () => {
           </div>
 
           {inspecting ? (
-            <div className="p-12 text-center text-text-muted text-xs flex items-center justify-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-accent" />
-              <span>Querying Docker daemon on {selectedServer?.name}...</span>
+            <div className="op-card p-12 text-center text-text-muted text-xs flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-brand-primary" />
+              <span>Querying Docker daemon on {selectedServer?.name || 'host'}...</span>
             </div>
           ) : dockerData ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {/* Daemon Status Summary */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-lg op-card">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="op-card p-2.5">
                   <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Daemon Status</div>
-                  <div className="mt-2">
-                    <StatusIndicator
-                      status={dockerData.running ? 'online' : 'offline'}
-                      label={dockerData.running ? 'Active & Running' : 'Not Detected'}
-                      variant="inline"
+                  <div className="mt-1.5">
+                    <StatusBadge
+                      status={dockerData.running ? 'HEALTHY' : 'OFFLINE'}
+                      size="sm"
                     />
                   </div>
-                  <div className="text-[10px] text-text-muted mt-1">Docker socket online</div>
+                  <div className="text-[10px] font-mono text-text-muted mt-1">Docker socket active</div>
                 </div>
 
-                <div className="p-3.5 rounded-lg op-card">
+                <div className="op-card p-2.5">
                   <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Containers</div>
-                  <div className="mt-1 text-xl font-semibold text-text-primary font-mono">
+                  <div className="mt-1 text-lg font-semibold text-text-primary font-mono">
                     {dockerData.containers ? dockerData.containers.length : 0}
                   </div>
-                  <div className="text-[10px] text-text-muted mt-0.5">Discovered containers</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">Active containers</div>
                 </div>
 
-                <div className="p-3.5 rounded-lg op-card">
+                <div className="op-card p-2.5">
                   <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Named Volumes</div>
-                  <div className="mt-1 text-xl font-semibold text-text-primary font-mono">
+                  <div className="mt-1 text-lg font-semibold text-text-primary font-mono">
                     {dockerData.volumes ? dockerData.volumes.length : 0}
                   </div>
-                  <div className="text-[10px] text-text-muted mt-0.5">Persistent volumes</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">Persistent mounts</div>
                 </div>
 
-                <div className="p-3.5 rounded-lg op-card">
-                  <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">DB Workloads</div>
-                  <div className="mt-1 text-xl font-semibold text-text-primary font-mono">
+                <div className="op-card p-2.5">
+                  <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Database Workloads</div>
+                  <div className="mt-1 text-lg font-semibold text-text-primary font-mono">
                     {dockerData.containers
                       ? dockerData.containers.filter((c: any) =>
                           c.image?.includes('postgres') || c.image?.includes('mysql') || c.image?.includes('mariadb')
                         ).length
                       : 0}
                   </div>
-                  <div className="text-[10px] text-text-muted mt-0.5">Database containers</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">Identified DB engines</div>
                 </div>
               </div>
 
-              {/* Containers List */}
-              <div className="rounded-lg border border-border bg-surface overflow-x-auto">
-                <div className="p-3.5 border-b border-border flex items-center justify-between">
+              {/* Containers Table */}
+              <div className="op-card overflow-hidden">
+                <div className="p-3 border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Box className="w-4 h-4 text-text-muted" />
-                    <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">Discovered Containers</h3>
+                    <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">
+                      Running Containers ({dockerData.containers?.length || 0})
+                    </h3>
                   </div>
                   <button
                     onClick={() => inspectDocker(selectedServerId)}
                     className="op-btn-ghost !py-1 !px-2 text-xs flex items-center gap-1"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>Refresh</span>
+                    <span>Re-scan</span>
                   </button>
                 </div>
 
                 {dockerData.containers && dockerData.containers.length > 0 ? (
-                  <table className="op-table">
-                    <thead>
-                      <tr>
-                        <th>Container Name</th>
-                        <th>Image</th>
-                        <th>Status</th>
-                        <th>Type Detection</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dockerData.containers.map((c: any, idx: number) => {
-                        const isDb =
-                          c.image?.includes('postgres') || c.image?.includes('mysql') || c.image?.includes('mariadb');
-                        return (
-                          <tr key={idx}>
-                            <td className="font-medium text-text-primary flex items-center gap-2">
-                              <Container className="w-3.5 h-3.5 text-text-muted" />
-                              <span>{c.name || c.id}</span>
-                            </td>
-                            <td className="font-mono text-[11px] text-text-secondary">{c.image}</td>
-                            <td>
-                              <StatusIndicator status={c.status} variant="inline" />
-                            </td>
-                            <td>
-                              {isDb ? (
-                                <span className="text-accent text-[11px] font-medium">
-                                  Database Engine (Use DB Protection)
-                                </span>
-                              ) : (
-                                <span className="text-text-muted text-[11px]">Application Service</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="op-table">
+                      <thead>
+                        <tr>
+                          <th>Container</th>
+                          <th>Image</th>
+                          <th>Ports</th>
+                          <th>Status</th>
+                          <th>Workload Classifier</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dockerData.containers.map((c: any, idx: number) => {
+                          const isDb =
+                            c.image?.includes('postgres') || c.image?.includes('mysql') || c.image?.includes('mariadb');
+                          return (
+                            <tr key={idx} className="hover:bg-surface-hover transition-colors font-mono">
+                              <td className="font-medium text-text-primary flex items-center gap-2">
+                                <Container className="w-3.5 h-3.5 text-text-muted" />
+                                <span>{c.name || c.id}</span>
+                              </td>
+                              <td className="text-[11px] text-text-secondary truncate max-w-xs">{c.image}</td>
+                              <td className="text-[11px] text-text-muted">{c.ports || '-'}</td>
+                              <td>
+                                <StatusBadge
+                                  status={c.status?.toLowerCase().includes('up') ? 'HEALTHY' : 'OFFLINE'}
+                                  size="sm"
+                                />
+                              </td>
+                              <td className="font-sans">
+                                {isDb ? (
+                                  <span className="text-brand-primary text-[11px] font-semibold">
+                                    Database Engine (Use DB Protection)
+                                  </span>
+                                ) : (
+                                  <span className="text-text-muted text-[11px]">Application Runtime</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div className="p-8 text-center text-text-muted text-xs">
                     No active containers reported by Docker daemon on this host.
@@ -217,34 +241,38 @@ export const DockerView: React.FC = () => {
                 )}
               </div>
 
-              {/* Volumes List */}
-              <div className="rounded-lg border border-border bg-surface overflow-x-auto">
-                <div className="p-3.5 border-b border-border flex items-center gap-2">
+              {/* Volumes Table */}
+              <div className="op-card overflow-hidden">
+                <div className="p-3 border-b border-border flex items-center gap-2">
                   <FolderArchive className="w-4 h-4 text-text-muted" />
-                  <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">Docker Volumes</h3>
+                  <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">
+                    Docker Named Volumes ({dockerData.volumes?.length || 0})
+                  </h3>
                 </div>
                 {dockerData.volumes && dockerData.volumes.length > 0 ? (
-                  <table className="op-table">
-                    <thead>
-                      <tr>
-                        <th>Volume Name</th>
-                        <th>Driver</th>
-                        <th>Mountpoint</th>
-                      </tr>
-                    </thead>
-                    <tbody className="font-mono text-[11px]">
-                      {dockerData.volumes.map((v: any, idx: number) => (
-                        <tr key={idx}>
-                          <td className="text-text-primary font-medium">{v.name}</td>
-                          <td className="text-text-muted">{v.driver || 'local'}</td>
-                          <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>
+                  <div className="overflow-x-auto">
+                    <table className="op-table">
+                      <thead>
+                        <tr>
+                          <th>Volume Name</th>
+                          <th>Driver</th>
+                          <th>Mountpoint</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="font-mono text-[11px]">
+                        {dockerData.volumes.map((v: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-surface-hover transition-colors">
+                            <td className="text-text-primary font-medium">{v.name}</td>
+                            <td className="text-text-muted">{v.driver || 'local'}</td>
+                            <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div className="p-8 text-center text-text-muted text-xs">
-                    No Docker persistent volumes found on this server.
+                    No Docker persistent volumes found on this server host.
                   </div>
                 )}
               </div>

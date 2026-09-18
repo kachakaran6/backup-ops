@@ -1,28 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { CommandPalette } from '../common/CommandPalette';
 import { useControlPlane } from '../../context/ControlPlaneContext';
 
 export const AppLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('backupops_sidebar_collapsed') === 'true';
+  });
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { stats, servers, databases, backups, refresh, isRefreshing } = useControlPlane();
+
+  // Hotkey listener: Cmd+K for Command Palette, Cmd+B for Sidebar Collapse
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setIsSidebarCollapsed((prev) => {
+          const next = !prev;
+          localStorage.setItem('backupops_sidebar_collapsed', String(next));
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('backupops_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   const getHeaderInfo = () => {
     const path = location.pathname;
 
     if (path.startsWith('/infrastructure/servers/')) {
       return {
-        title: 'Server Operational Details',
-        subtitle: 'Live system status, Docker environment, and associated databases',
+        title: 'Server Telemetry & Workloads',
+        subtitle: 'Hardware gauges, Docker container instances, and detected databases',
       };
     }
     if (path.startsWith('/databases/')) {
       return {
-        title: 'Database Operational Details',
-        subtitle: 'Telemetry, Point-In-Time Recovery readiness, and backup history',
+        title: 'Database Protection & PITR',
+        subtitle: 'Point-In-Time Recovery readiness, WAL archiving status, and backup history',
       };
     }
 
@@ -30,72 +64,72 @@ export const AppLayout: React.FC = () => {
       case '/overview':
       case '/':
         return {
-          title: 'System Operations Control Plane',
-          subtitle: 'Live infrastructure health, database protection, storage destinations, and recovery chains',
+          title: 'Operations Overview',
+          subtitle: 'System health strip, active job throughput, and recovery readiness',
         };
       case '/infrastructure/coolify':
         return {
-          title: 'Coolify Infrastructure Discovery',
-          subtitle: 'First-class read-only inventory source for servers, applications, databases, and services',
+          title: 'Coolify Infrastructure',
+          subtitle: 'Read-only synchronized inventory of servers, applications, and managed databases',
         };
       case '/infrastructure/servers':
         return {
           title: 'Infrastructure Servers',
-          subtitle: 'Coolify-discovered and direct SSH-managed Linux hosts',
+          subtitle: 'Coolify-discovered nodes and SSH-managed Linux host catalog',
         };
       case '/infrastructure/docker':
         return {
-          title: 'Docker Runtime & Storage Volumes',
+          title: 'Docker & Storage Volumes',
           subtitle: 'Host container daemons and distinction between volume snapshots and database dumps',
         };
       case '/databases':
         return {
-          title: 'Database Data Protection',
-          subtitle: 'PostgreSQL Base+WAL, MySQL/MariaDB engines with live connection telemetry',
+          title: 'Database Catalog',
+          subtitle: 'PostgreSQL Base+WAL, MySQL, and MariaDB engines with live connection telemetry',
         };
       case '/storage':
         return {
           title: 'Storage Destinations',
-          subtitle: 'Local host volume mounts, AWS S3, MinIO, and S3-compatible endpoints',
+          subtitle: 'Local volume mounts, AWS S3, MinIO, and S3-compatible endpoints',
         };
       case '/backups':
         return {
-          title: 'Automated Backup Policies & History',
-          subtitle: 'Policy schedules, streaming SHA-256 verification badges, and artifact metadata',
+          title: 'Backups & Recovery Chains',
+          subtitle: 'Policy schedules, streaming SHA-256 verification badges, and artifact lineage',
         };
       case '/restore':
         return {
-          title: 'Disaster Recovery & Restore Center',
-          subtitle: 'Target redirection, point-in-time recovery, and confirmation-protected operations',
+          title: 'Disaster Recovery & Restore',
+          subtitle: 'Target redirection, point-in-time recovery, and confirmation-protected rollback',
         };
       case '/operations':
         return {
-          title: 'Operations & Asynchronous Worker Jobs',
-          subtitle: 'BullMQ queue state machine, progress metrics, and live execution logs',
+          title: 'Operations & Worker Jobs',
+          subtitle: 'Asynchronous task state machine, transfer throughput, and live terminal logs',
         };
       case '/monitoring':
         return {
-          title: 'Platform Observability & Recovery Health',
+          title: 'Platform Observability',
           subtitle: 'Service health, database RPO freshness, and recovery chain validation',
         };
       case '/notifications':
         return {
-          title: 'Notifications & Alert Integrations',
-          subtitle: 'SMTP Email, Telegram Bot, Pushover, and Gotify incident dispatch channels',
+          title: 'Notifications & Alert Channels',
+          subtitle: 'SMTP Email, Telegram Bot, Pushover, and Gotify incident dispatch rules',
         };
       case '/vault':
         return {
           title: 'Encrypted Credential Vault',
-          subtitle: 'AES-256-GCM zero-leak secret storage for SSH keys, tokens, and database passwords',
+          subtitle: 'AES-256-GCM zero-leak secret storage for SSH keys, tokens, and database credentials',
         };
       case '/audit':
         return {
-          title: 'Security & Operational Audit Trail',
-          subtitle: 'Immutable compliance logging of administrative and destructive activities',
+          title: 'Audit Trail',
+          subtitle: 'Immutable compliance logging of administrative, data movement, and destructive activities',
         };
       case '/settings':
         return {
-          title: 'System Settings & Workspace Configuration',
+          title: 'Workspace Settings',
           subtitle: 'Control plane preferences, admin credentials management, and platform info',
         };
       default:
@@ -120,6 +154,8 @@ export const AppLayout: React.FC = () => {
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
         counts={{
           servers: servers.length,
           databases: databases.length,
@@ -137,14 +173,21 @@ export const AppLayout: React.FC = () => {
           onRefresh={refresh}
           isRefreshing={isRefreshing}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onQuickAction={handleQuickAction}
         />
 
         {/* Scrollable View Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 w-full min-w-0 max-w-full overflow-x-hidden">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 w-full min-w-0 max-w-full overflow-x-hidden">
           <Outlet />
         </main>
       </div>
+
+      {/* Global Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
     </div>
   );
 };

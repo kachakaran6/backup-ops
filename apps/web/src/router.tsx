@@ -31,11 +31,16 @@ import { useControlPlane } from './context/ControlPlaneContext';
 
 // Route Adapters
 const OverviewRoute: React.FC = () => {
-  const { stats } = useControlPlane();
+  const { stats, servers, databases, storageDestinations, backups, chains } = useControlPlane();
   const navigate = useNavigate();
   return (
     <OverviewView
       stats={stats}
+      servers={servers}
+      databases={databases}
+      storageDestinations={storageDestinations}
+      backups={backups}
+      chains={chains}
       onNavigate={(tab: string) => {
         const map: Record<string, string> = {
           coolify: '/infrastructure/coolify',

@@ -44,17 +44,17 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
   const isChainHealthy = status.toLowerCase() === 'healthy';
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-4 sm:p-5 my-4">
+    <div className="bg-surface border border-border rounded-lg p-4 sm:p-5 my-3">
       {/* Chain Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-md bg-surface-secondary border border-border text-accent">
+          <div className="p-2 rounded-md bg-surface-secondary border border-border text-brand-primary">
             <GitCommit className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-text-primary text-sm">
-                Recovery Chain #{chainNumber}
+                Recovery Lineage #{chainNumber}
               </span>
               {databaseName && (
                 <span className="text-[11px] px-2 py-0.5 rounded-md bg-surface-secondary text-text-secondary border border-border font-mono">
@@ -71,30 +71,30 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
         {/* Chain Status Badge */}
         <div className="flex items-center gap-2">
           {isChainHealthy ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono font-medium bg-success-muted text-success border border-success/30">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono font-medium bg-success/10 text-success border border-success/30">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              HEALTHY RECOVERY CHAIN
+              HEALTHY RECOVERY LINEAGE
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono font-medium bg-error-muted text-error border border-error/30">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono font-medium bg-error/10 text-error border border-error/30">
               <XCircle className="w-3.5 h-3.5" />
-              BROKEN RECOVERY CHAIN
+              BROKEN RECOVERY LINEAGE
             </span>
           )}
         </div>
       </div>
 
       {/* Visual Tree */}
-      <div className="mt-5 space-y-3">
+      <div className="mt-4 space-y-3">
         {/* Base Backup Box */}
         {baseBackup && (
           <div className="relative pl-6 sm:pl-8 before:absolute before:left-3 before:top-6 before:bottom-0 before:w-0.5 before:bg-border">
-            <div className="absolute left-1.5 top-2 w-3.5 h-3.5 rounded-full bg-accent ring-4 ring-surface" />
+            <div className="absolute left-1.5 top-2 w-3.5 h-3.5 rounded-full bg-brand-primary ring-4 ring-surface" />
             <div className="p-3 sm:p-4 rounded-lg bg-surface-secondary border border-border hover:border-border-strong transition-colors">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/25 tracking-wide uppercase font-mono">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-primary/15 text-brand-primary border border-brand-primary/30 tracking-wide uppercase font-mono">
                       {baseBackup.type.toUpperCase()} ANCHOR
                     </span>
                     <span className="text-xs font-mono text-text-secondary">
@@ -117,18 +117,18 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
                   {onRestoreFromBackup && (
                     <button
                       onClick={() => onRestoreFromBackup(baseBackup)}
-                      className="op-btn-secondary !py-1 !px-2.5 text-xs"
+                      className="op-btn-secondary !py-1 !px-2.5 text-xs flex items-center gap-1"
                     >
-                      <RotateCcw className="w-3 h-3 text-accent" />
+                      <RotateCcw className="w-3 h-3 text-brand-primary" />
                       <span>Restore Base</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-x-4 gap-y-1">
-                <span>Path: <code className="text-text-secondary font-mono">{baseBackup.storagePath.split('/').pop()}</code></span>
-                <span>SHA-256: <code className="text-text-secondary font-mono">{baseBackup.checksumSha256 ? baseBackup.checksumSha256.slice(0, 10) + '...' : 'pending'}</code></span>
+              <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-x-4 gap-y-1 font-mono">
+                <span>Path: <code className="text-text-secondary">{baseBackup.storagePath.split('/').pop()}</code></span>
+                <span>SHA-256: <code className="text-text-secondary">{baseBackup.checksumSha256 ? baseBackup.checksumSha256.slice(0, 10) + '...' : 'pending'}</code></span>
               </div>
             </div>
           </div>
@@ -154,7 +154,7 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
               <div
                 className={`p-3 sm:p-4 rounded-lg bg-surface-secondary/70 border transition-colors ${
                   isFailed
-                    ? 'border-error/40 bg-error-muted'
+                    ? 'border-error/40 bg-error/10'
                     : 'border-border hover:border-border-strong'
                 }`}
               >
@@ -164,7 +164,7 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wide uppercase font-mono border ${
                           isFailed
-                            ? 'bg-error-muted text-error border-error/30'
+                            ? 'bg-error/10 text-error border-error/30'
                             : 'bg-surface-elevated text-text-secondary border-border'
                         }`}
                       >
@@ -200,17 +200,17 @@ export const BackupChainVisualizer: React.FC<BackupChainVisualizerProps> = ({
                     {onRestoreFromBackup && (
                       <button
                         onClick={() => onRestoreFromBackup(inc)}
-                        className="op-btn-secondary !py-1 !px-2.5 text-xs"
+                        className="op-btn-secondary !py-1 !px-2.5 text-xs flex items-center gap-1"
                       >
-                        <RotateCcw className="w-3 h-3 text-accent" />
-                        <span>Restore to Point</span>
+                        <RotateCcw className="w-3 h-3 text-brand-primary" />
+                        <span>Restore Point</span>
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-x-4 gap-y-1">
-                  <span>Delta Storage: <code className="text-text-secondary font-mono">{inc.storagePath.split('/').pop()}</code></span>
+                <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-x-4 gap-y-1 font-mono">
+                  <span>Delta Storage: <code className="text-text-secondary">{inc.storagePath.split('/').pop()}</code></span>
                   <span>Point: <span className="text-text-secondary">{new Date(inc.recoveryPointTime || inc.createdAt).toLocaleString()}</span></span>
                 </div>
               </div>

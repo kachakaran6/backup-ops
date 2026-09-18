@@ -8,9 +8,14 @@ import {
   ArrowRight,
   ShieldAlert,
   XCircle,
+  Clock,
+  HardDrive,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import { RestoreJob, Backup, Database as DatabaseType, Server as ServerType } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { useControlPlane } from '../context/ControlPlaneContext';
 import { api } from '../services/api';
 
@@ -97,38 +102,71 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   };
 
+  const mapRestoreState = (state: string): any => {
+    switch (state) {
+      case 'completed':
+        return 'HEALTHY';
+      case 'running':
+      case 'planning':
+      case 'verifying':
+        return 'RUNNING';
+      case 'failed':
+        return 'FAILED';
+      case 'queued':
+        return 'QUEUED';
+      default:
+        return 'UNKNOWN';
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 op-card p-4 sm:p-5">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <h2 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
-            <RotateCcw className="w-4 h-4 text-text-muted" />
-            Disaster Recovery & Lineage-Aware Restore Operations
-          </h2>
-          <p className="text-xs text-text-muted mt-0.5 max-w-2xl">
-            Deterministic state reconstruction from verified Base snapshots, sequential incremental deltas, and point-in-time recovery logs.
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold text-text-primary tracking-tight">
+              Disaster Recovery &amp; State Restores
+            </h1>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              {restoreJobs.length} executions
+            </span>
+          </div>
+          <p className="text-xs text-text-muted mt-0.5">
+            Deterministic reconstruction from verified Base snapshots, sequential incremental deltas, and point-in-time recovery logs.
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            if (backups.length > 0 && !selectedBackupId) setSelectedBackupId(backups[0].id);
-            setShowModal(true);
-          }}
-          disabled={backups.length === 0}
-          className="op-btn-primary self-start sm:self-auto disabled:opacity-50"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Launch Restore</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={onRefresh}
+            className="op-btn-secondary"
+            title="Refresh Restores"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => {
+              if (backups.length > 0 && !selectedBackupId) setSelectedBackupId(backups[0].id);
+              setShowModal(true);
+            }}
+            disabled={backups.length === 0}
+            className="op-btn-primary disabled:opacity-50"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Launch Restore</span>
+          </button>
+        </div>
       </div>
 
       {/* Restore Executions History */}
-      <div className="op-card p-4 sm:p-5 space-y-3">
-        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide border-b border-border pb-3">
-          Recent Restore Executions ({restoreJobs.length})
-        </h4>
+      <div className="op-card p-4 space-y-3">
+        <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+            Restore Executions &amp; Rollback History ({restoreJobs.length})
+          </h3>
+        </div>
 
         {restoreJobs.length === 0 ? (
           <EmptyState
@@ -143,35 +181,25 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
             {restoreJobs.map((job) => (
               <div
                 key={job.id}
-                className="p-3.5 bg-surface-secondary rounded-md border border-border space-y-2"
+                className="p-3 bg-surface-secondary rounded border border-border space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-text-primary">Restore #{job.id.slice(0, 8)}</span>
-                    <span className="text-text-muted">• Target: {job.targetType}</span>
+                    <span className="text-text-muted text-[11px]">• Target: {job.targetType}</span>
                   </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                      job.state === 'completed'
-                        ? 'bg-success-muted text-success border border-success/30'
-                        : job.state === 'running'
-                        ? 'bg-accent/15 text-accent border border-accent/30'
-                        : 'bg-surface-elevated text-text-muted border border-border'
-                    }`}
-                  >
-                    {job.state.toUpperCase()}
-                  </span>
+                  <StatusBadge status={mapRestoreState(job.state)} size="sm" />
                 </div>
 
                 <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-border">
                   <div
-                    className="bg-accent h-full rounded-full transition-all"
-                    style={{ width: `${job.progressPercent}%` }}
+                    className="bg-brand-primary h-full rounded-full transition-all"
+                    style={{ width: `${job.progressPercent || 0}%` }}
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-text-muted">
-                  <span>{job.currentStep}</span>
+                <div className="flex items-center justify-between text-[11px] text-text-muted font-mono">
+                  <span>{job.currentStep || 'Initializing'}</span>
                   <span>{new Date(job.createdAt).toLocaleString()}</span>
                 </div>
               </div>
@@ -182,16 +210,16 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
 
       {/* Restore Wizard Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="op-card-elevated max-w-xl w-full p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-xl w-full p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto border-border animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-text-muted" />
-                <h3 className="font-semibold text-xs text-text-primary">Lineage-Aware Restore Operation</h3>
+                <ShieldAlert className="w-4 h-4 text-brand-primary" />
+                <h3 className="font-semibold text-sm text-text-primary">Lineage-Aware Restore Operation</h3>
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-text-muted hover:text-text-primary cursor-pointer"
+                className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-surface-secondary"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -199,7 +227,7 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
 
             <form onSubmit={handleStartRestore} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-text-secondary mb-1">Target Recovery Point</label>
+                <label className="block text-text-secondary mb-1 font-medium">Target Recovery Point</label>
                 <select
                   value={selectedBackupId}
                   onChange={(e) => setSelectedBackupId(e.target.value)}
@@ -215,31 +243,31 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
 
               {/* Chain-Aware Restore Plan Section */}
               {loadingPlan ? (
-                <div className="p-3 bg-surface-secondary rounded-md border border-border text-center text-text-muted">
+                <div className="p-3 bg-surface-secondary rounded border border-border text-center text-text-muted font-mono">
                   Analyzing recovery chain dependencies...
                 </div>
               ) : restorePlan ? (
-                <div className="p-3 bg-surface-secondary rounded-md border border-border space-y-2">
+                <div className="p-3 bg-surface-secondary rounded border border-border space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-text-primary flex items-center gap-1.5">
-                      <GitCommit className="w-3.5 h-3.5 text-accent" />
-                      Required Recovery Chain
+                      <GitCommit className="w-3.5 h-3.5 text-brand-primary" />
+                      Required Recovery Lineage
                     </span>
                     {restorePlan.canRestore ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-success-muted text-success border border-success/30">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-success/10 text-success border border-success/30">
                         <CheckCircle2 className="w-3 h-3" />
-                        CHAIN HEALTHY ({restorePlan.requiredBackups?.length} artifacts)
+                        LINEAGE HEALTHY ({restorePlan.requiredBackups?.length} artifacts)
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-error-muted text-error border border-error/30">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-error/10 text-error border border-error/30">
                         <XCircle className="w-3 h-3" />
-                        CHAIN BROKEN
+                        LINEAGE BROKEN
                       </span>
                     )}
                   </div>
 
                   {restorePlan.brokenReason && (
-                    <div className="p-2 bg-error-muted border border-error/30 rounded text-error text-[11px]">
+                    <div className="p-2 bg-error/10 border border-error/30 rounded text-error text-[11px] font-mono">
                       {restorePlan.brokenReason}
                     </div>
                   )}
@@ -253,7 +281,7 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-text-muted">Step {i + 1}:</span>
-                          <span className="font-semibold text-accent uppercase">
+                          <span className="font-semibold text-brand-primary uppercase">
                             {rb.type} #{rb.sequence || 1}
                           </span>
                           <span className="text-text-secondary truncate max-w-[200px]">
@@ -265,19 +293,19 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
                     ))}
                   </div>
 
-                  <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-text-secondary">
-                    <span>Payload: <strong className="text-text-primary font-mono">{formatBytes(restorePlan.totalRestoreSizeBytes)}</strong></span>
-                    <span>Est. Time: <strong className="text-text-primary font-mono">~{restorePlan.estimatedRestoreTimeSeconds}s</strong></span>
+                  <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-text-secondary font-mono">
+                    <span>Payload: <strong className="text-text-primary">{formatBytes(restorePlan.totalRestoreSizeBytes)}</strong></span>
+                    <span>Est. Duration: <strong className="text-text-primary">~{restorePlan.estimatedRestoreTimeSeconds}s</strong></span>
                   </div>
                 </div>
               ) : null}
 
               <div>
-                <label className="block text-text-secondary mb-1">Restore Target Strategy</label>
+                <label className="block text-text-secondary mb-1 font-medium">Restore Target Strategy</label>
                 <select
                   value={targetType}
                   onChange={(e) => setTargetType(e.target.value as any)}
-                  className="op-input"
+                  className="op-input font-sans"
                 >
                   <option value="original">Restore to Original Database (Overwrites target tables)</option>
                   <option value="new_database">Restore to New Database Instance</option>
@@ -286,14 +314,14 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
               </div>
 
               {/* Destructive Warning Box */}
-              <div className="p-3 rounded-md bg-warning-muted border border-warning/30 space-y-2">
+              <div className="p-3 rounded bg-warning/10 border border-warning/30 space-y-2">
                 <div className="flex items-start gap-2 text-warning">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
-                    <h5 className="font-semibold text-xs text-text-primary">Destructive Operation Notice</h5>
+                    <h5 className="font-semibold text-xs text-text-primary">Destructive Operation Safety Control</h5>
                     <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
                       Restoring from backup will replay sequential changes into the target database.
-                      Ensure active transactions are halted on the destination.
+                      Active connections will be interrupted.
                     </p>
                   </div>
                 </div>
@@ -303,10 +331,10 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
                     type="checkbox"
                     checked={overwriteConfirmed}
                     onChange={(e) => setOverwriteConfirmed(e.target.checked)}
-                    className="rounded border-border text-accent focus:ring-accent"
+                    className="rounded border-border text-brand-primary focus:ring-brand-primary"
                   />
                   <span className="text-xs text-text-primary font-medium">
-                    I understand the target data implications and authorize this restore.
+                    I understand the target data implications and authorize this restore operation.
                   </span>
                 </label>
               </div>

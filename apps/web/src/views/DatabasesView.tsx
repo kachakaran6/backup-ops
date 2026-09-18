@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Database as DatabaseIcon,
   Plus,
@@ -7,10 +7,16 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
+  Layers,
+  ArrowUpDown,
+  Server,
+  KeyRound,
 } from 'lucide-react';
-import { Database } from '../types';
+import { Database, DatabaseType } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
-import { StatusIndicator } from '../components/common/StatusIndicator';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { FilterBar } from '../components/common/FilterBar';
 import * as api from '../services/api';
 
 interface DatabasesViewProps {
@@ -26,8 +32,12 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
   onSelectDatabase,
   onTriggerBackup,
 }) => {
+  const [search, setSearch] = useState('');
+  const [engineFilter, setEngineFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
+  const [type, setType] = useState<DatabaseType>('postgres');
   const [host, setHost] = useState('127.0.0.1');
   const [port, setPort] = useState(5432);
   const [databaseName, setDatabaseName] = useState('production');
@@ -36,12 +46,25 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; version?: string } | null>(null);
 
+  const handleTypeChange = (newType: DatabaseType) => {
+    setType(newType);
+    if (newType === 'postgres') setPort(5432);
+    else if (newType === 'mysql' || newType === 'mariadb') setPort(3306);
+    else if (newType === 'redis') setPort(6379);
+    else if (newType === 'mongodb') setPort(27017);
+  };
+
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const res = await api.testDatabase('probe');
-    setTestResult(res);
-    setTesting(false);
+    try {
+      const res = await api.testDatabase('probe');
+      setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message || 'Database connection test failed' });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -70,127 +93,284 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const protectedCount = databases.filter((d) => d.protectionStatus === 'protected').length;
+  const pitrCount = databases.filter((d) => d.walEnabled).length;
+  const degradedCount = databases.filter((d) => d.status !== 'connected').length;
+
+  const filteredDatabases = useMemo(() => {
+    return databases.filter((db) => {
+      const matchesSearch =
+        search === '' ||
+        db.name.toLowerCase().includes(search.toLowerCase()) ||
+        db.databaseName.toLowerCase().includes(search.toLowerCase()) ||
+        db.host.toLowerCase().includes(search.toLowerCase());
+
+      const matchesEngine =
+        engineFilter === 'all' || db.type === engineFilter;
+
+      const matchesStatus =
+        statusFilter === 'all' || db.status === statusFilter;
+
+      return matchesSearch && matchesEngine && matchesStatus;
+    });
+  }, [databases, search, engineFilter, statusFilter]);
+
   return (
-    <div className="space-y-6">
-      {/* Top action bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Action Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
-            <DatabaseIcon className="w-4 h-4 text-text-muted" />
-            Protected & Discovered Databases
-          </h3>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold text-text-primary tracking-tight">
+              Database Workloads
+            </h1>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              {databases.length} registered
+            </span>
+          </div>
           <p className="text-xs text-text-muted mt-0.5">
-            PostgreSQL, MySQL, and MariaDB instances configured for logical dumps and physical Base + WAL recovery.
+            PostgreSQL, MySQL, MariaDB, and Redis instances configured for logical dumps and continuous Base + WAL archiving.
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="op-btn-primary self-start sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Connect Database</span>
-        </button>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={onRefresh}
+            className="op-btn-secondary"
+            title="Refresh Databases"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="op-btn-primary"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Connect Database</span>
+          </button>
+        </div>
       </div>
 
+      {/* Operational Stats Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Total Databases</span>
+            <div className="text-lg font-semibold font-mono text-text-primary">{databases.length}</div>
+          </div>
+          <DatabaseIcon className="w-4 h-4 text-text-muted" />
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-success uppercase tracking-wider">Protected by Policy</span>
+            <div className="text-lg font-semibold font-mono text-success">{protectedCount}</div>
+          </div>
+          <Shield className="w-4 h-4 text-success" />
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-accent uppercase tracking-wider">Base + WAL (PITR)</span>
+            <div className="text-lg font-semibold font-mono text-accent">{pitrCount}</div>
+          </div>
+          <Layers className="w-4 h-4 text-accent" />
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-warning uppercase tracking-wider">Attention Required</span>
+            <div className="text-lg font-semibold font-mono text-warning">{degradedCount}</div>
+          </div>
+          <AlertTriangle className="w-4 h-4 text-warning" />
+        </div>
+      </div>
+
+      {/* Filter Bar */}
+      <FilterBar
+        searchPlaceholder="Filter databases by name, database, host..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        filters={[
+          {
+            label: 'Engine',
+            options: [
+              { label: 'All Engines', value: 'all' },
+              { label: 'PostgreSQL', value: 'postgres' },
+              { label: 'MySQL', value: 'mysql' },
+              { label: 'MariaDB', value: 'mariadb' },
+              { label: 'Redis', value: 'redis' },
+            ],
+            value: engineFilter,
+            onChange: setEngineFilter,
+          },
+          {
+            label: 'Status',
+            options: [
+              { label: 'All Statuses', value: 'all' },
+              { label: 'Connected', value: 'connected' },
+              { label: 'Disconnected', value: 'disconnected' },
+            ],
+            value: statusFilter,
+            onChange: setStatusFilter,
+          },
+        ]}
+        totalCount={databases.length}
+        filteredCount={filteredDatabases.length}
+      />
+
+      {/* High-Density Data Table */}
       {databases.length === 0 ? (
         <EmptyState
           icon={DatabaseIcon}
-          title="No databases discovered or connected"
-          description="Connect your PostgreSQL or MySQL databases, or sync your Coolify instance to automatically discover database containers running on your servers."
+          title="No databases configured"
+          description="Connect your PostgreSQL or MySQL databases, or sync your Coolify instance to automatically discover database containers."
           actionText="Connect Database"
           onAction={() => setShowAddModal(true)}
         />
+      ) : filteredDatabases.length === 0 ? (
+        <div className="op-card p-8 text-center">
+          <p className="text-xs text-text-muted">No databases match the active filter criteria.</p>
+          <button
+            onClick={() => {
+              setSearch('');
+              setEngineFilter('all');
+              setStatusFilter('all');
+            }}
+            className="op-btn-ghost mt-2 text-xs"
+          >
+            Clear all filters
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {databases.map((db) => {
-            return (
-              <div
-                key={db.id}
-                onClick={() => onSelectDatabase(db)}
-                className="op-card p-4 hover:border-border-strong transition-colors cursor-pointer space-y-3 group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="p-2 rounded-md bg-surface-secondary border border-border text-text-muted shrink-0">
-                      <DatabaseIcon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-semibold text-text-primary group-hover:text-accent transition-colors truncate">
-                        {db.name}
-                      </h4>
-                      <p className="text-[11px] font-mono text-text-muted truncate">
-                        {db.type.toUpperCase()} • {db.databaseName}
-                      </p>
-                    </div>
-                  </div>
-                  <StatusIndicator status={db.status} variant="inline" />
-                </div>
-
-                {/* Specs grid */}
-                <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-border-subtle text-[11px] font-mono">
-                  <div>
-                    <span className="text-text-muted block text-[10px]">DATABASE SIZE</span>
-                    <span className="text-text-primary font-medium">{formatBytes(db.sizeBytes)}</span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">TABLES</span>
-                    <span className="text-text-primary font-medium">{db.tableCount ?? 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">WAL ARCHIVING</span>
-                    <span className={db.walEnabled ? 'text-success font-medium' : 'text-text-muted'}>
-                      {db.walEnabled ? 'Active (PITR)' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">RECOVERY</span>
-                    <span
-                      className={`font-medium ${
-                        db.recoveryReadiness === 'ready'
-                          ? 'text-success'
-                          : db.recoveryReadiness === 'degraded'
-                          ? 'text-warning'
-                          : 'text-text-muted'
-                      }`}
+        <div className="op-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="op-table">
+              <thead>
+                <tr>
+                  <th>Database</th>
+                  <th>Engine</th>
+                  <th>Host / Endpoint</th>
+                  <th>Size</th>
+                  <th>Protection Strategy</th>
+                  <th>WAL / PITR</th>
+                  <th>Status</th>
+                  <th>Recovery Readiness</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDatabases.map((db) => {
+                  return (
+                    <tr
+                      key={db.id}
+                      onClick={() => onSelectDatabase(db)}
+                      className="cursor-pointer hover:bg-surface-hover transition-colors group"
                     >
-                      {db.recoveryReadiness.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-                  <span className="text-xs text-text-muted group-hover:text-accent font-medium flex items-center gap-1">
-                    <span>View Chain</span>
-                    <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTriggerBackup(db);
-                    }}
-                    className="op-btn-secondary !text-xs !py-1 !px-2.5"
-                  >
-                    <span>Backup Now</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded bg-surface-secondary border border-border flex items-center justify-center shrink-0 text-text-muted group-hover:text-brand-primary transition-colors">
+                            <DatabaseIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-xs text-text-primary group-hover:text-brand-primary transition-colors truncate">
+                              {db.name}
+                            </div>
+                            <div className="text-[10px] font-mono text-text-muted truncate">
+                              Instance: {db.databaseName}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+                          {db.type}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="font-mono text-xs text-text-secondary truncate">
+                          {db.host}:{db.port}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="font-mono text-xs text-text-primary font-medium">
+                          {formatBytes(db.sizeBytes)}
+                        </div>
+                        {db.tableCount ? (
+                          <div className="text-[10px] font-mono text-text-muted">
+                            {db.tableCount} tables
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <span className="text-xs font-medium text-text-secondary capitalize">
+                          {db.protectionStatus}
+                        </span>
+                      </td>
+                      <td>
+                        {db.walEnabled ? (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/30 font-medium">
+                            PITR ACTIVE
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-text-muted">
+                            Logical only
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <StatusBadge
+                          status={db.status === 'connected' ? 'HEALTHY' : 'FAILED'}
+                          size="sm"
+                        />
+                      </td>
+                      <td>
+                        <span className="text-xs font-mono capitalize text-text-secondary">
+                          {db.recoveryReadiness}
+                        </span>
+                      </td>
+                      <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => onTriggerBackup(db)}
+                            className="op-btn-secondary !text-[11px] !py-1 !px-2 flex items-center gap-1"
+                            title="Trigger Immediate Backup"
+                          >
+                            <Shield className="w-3 h-3 text-brand-primary" />
+                            <span>Backup</span>
+                          </button>
+                          <button
+                            onClick={() => onSelectDatabase(db)}
+                            className="op-btn-ghost !p-1 text-text-muted hover:text-text-primary"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Add Database Modal */}
+      {/* Connect Database Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <DatabaseIcon className="w-4 h-4 text-text-muted" />
-                <h3 className="font-semibold text-xs text-text-primary">Connect Database</h3>
+                <div className="p-1.5 rounded bg-surface-secondary text-brand-primary border border-border">
+                  <DatabaseIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-text-primary">Connect Database Workload</h3>
+                  <p className="text-[11px] text-text-muted">Enables continuous WAL streaming, dumps, and automated verification.</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-text-muted hover:text-text-primary cursor-pointer"
+                className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-surface-secondary"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -198,25 +378,40 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
 
             <form onSubmit={handleCreate} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">Friendly Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Database Display Name</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Production PostgreSQL"
+                  placeholder="e.g. Primary Production DB"
                   className="op-input"
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Engine Type</label>
+                <select
+                  value={type}
+                  onChange={(e) => handleTypeChange(e.target.value as DatabaseType)}
+                  className="op-input"
+                >
+                  <option value="postgres">PostgreSQL (Base Backup + WAL Archiving)</option>
+                  <option value="mysql">MySQL (mysqldump / physical snapshot)</option>
+                  <option value="mariadb">MariaDB (Logical Dump)</option>
+                  <option value="redis">Redis (RDB snapshot)</option>
+                </select>
+              </div>
+
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-text-secondary mb-1">Host / IP</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Host / IP Address</label>
                   <input
                     type="text"
                     required
                     value={host}
                     onChange={(e) => setHost(e.target.value)}
+                    placeholder="127.0.0.1 or db.internal"
                     className="op-input font-mono"
                   />
                 </div>
@@ -231,68 +426,83 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">Database Name</label>
-                <input
-                  type="text"
-                  required
-                  value={databaseName}
-                  onChange={(e) => setDatabaseName(e.target.value)}
-                  placeholder="production"
-                  className="op-input font-mono"
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">Username</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Database Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={databaseName}
+                    onChange={(e) => setDatabaseName(e.target.value)}
+                    placeholder="production"
+                    className="op-input font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">User</label>
                   <input
                     type="text"
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    placeholder="postgres"
                     className="op-input font-mono"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">Password</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Database password"
-                    className="op-input font-mono"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Database user password"
+                  className="op-input font-mono"
+                />
               </div>
 
               {testResult && (
                 <div
                   className={`p-2.5 rounded-md text-xs flex items-center gap-2 ${
                     testResult.success
-                      ? 'bg-success-muted text-success border border-success/30'
-                      : 'bg-error-muted text-error border border-error/30'
+                      ? 'bg-success/10 text-success border border-success/30'
+                      : 'bg-error/10 text-error border border-error/30'
                   }`}
                 >
-                  {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
-                  <span>{testResult.message}</span>
+                  {testResult.success ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="font-mono text-[11px]">{testResult.message}</span>
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <div className="flex items-center justify-between pt-3 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="op-btn-ghost"
+                  onClick={handleTest}
+                  disabled={testing || !host}
+                  className="op-btn-secondary"
                 >
-                  Cancel
+                  {testing ? 'Testing Handshake...' : 'Test Connection'}
                 </button>
-                <button
-                  type="submit"
-                  className="op-btn-primary"
-                >
-                  Save & Protect
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="op-btn-ghost"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="op-btn-primary"
+                  >
+                    Save & Protect
+                  </button>
+                </div>
               </div>
             </form>
           </div>

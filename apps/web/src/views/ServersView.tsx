@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Server as ServerIcon,
   Plus,
@@ -6,10 +6,18 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
+  Terminal,
+  Cpu,
+  HardDrive,
+  Box,
+  Layers,
+  ArrowUpDown,
 } from 'lucide-react';
-import { Server } from '../types';
+import { Server, ServerStatus } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
-import { StatusIndicator } from '../components/common/StatusIndicator';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { FilterBar } from '../components/common/FilterBar';
 import * as api from '../services/api';
 
 interface ServersViewProps {
@@ -23,6 +31,9 @@ export const ServersView: React.FC<ServersViewProps> = ({
   onRefresh,
   onSelectServer,
 }) => {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [modeFilter, setModeFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
@@ -36,15 +47,20 @@ export const ServersView: React.FC<ServersViewProps> = ({
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const res = await api.testSshServer({
-      host,
-      port,
-      username,
-      privateKey,
-      password,
-    });
-    setTestResult(res);
-    setTesting(false);
+    try {
+      const res = await api.testSshServer({
+        host,
+        port,
+        username,
+        privateKey,
+        password,
+      });
+      setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message || 'Connection test failed' });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -67,114 +83,292 @@ export const ServersView: React.FC<ServersViewProps> = ({
     onRefresh();
   };
 
+  // Metrics summary
+  const onlineCount = servers.filter((s) => s.status === 'online').length;
+  const degradedCount = servers.filter((s) => s.status === 'degraded').length;
+  const offlineCount = servers.filter((s) => s.status === 'offline').length;
+
+  const filteredServers = useMemo(() => {
+    return servers.filter((s) => {
+      const matchesSearch =
+        search === '' ||
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        s.host.toLowerCase().includes(search.toLowerCase()) ||
+        (s.os && s.os.toLowerCase().includes(search.toLowerCase()));
+
+      const matchesStatus =
+        statusFilter === 'all' || s.status === statusFilter;
+
+      const matchesMode =
+        modeFilter === 'all' || s.connectionMode === modeFilter;
+
+      return matchesSearch && matchesStatus && matchesMode;
+    });
+  }, [servers, search, statusFilter, modeFilter]);
+
   return (
-    <div className="space-y-6">
-      {/* Action bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Top Operational Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
-            <ServerIcon className="w-4 h-4 text-text-muted" />
-            Managed Infrastructure Servers
-          </h3>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold text-text-primary tracking-tight">
+              Infrastructure Servers
+            </h1>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              {servers.length} managed
+            </span>
+          </div>
           <p className="text-xs text-text-muted mt-0.5">
-            Linux hosts connected via Direct SSH or discovered automatically from Coolify.
+            Physical, virtual, and cloud nodes connected via Direct SSH or imported from Coolify.
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="op-btn-primary self-start sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Server (SSH)</span>
-        </button>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={onRefresh}
+            className="op-btn-secondary"
+            title="Refresh Server Fleet"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="op-btn-primary"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Server (SSH)</span>
+          </button>
+        </div>
       </div>
 
+      {/* Health Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">Total Fleet</span>
+            <div className="text-lg font-semibold font-mono text-text-primary">{servers.length}</div>
+          </div>
+          <ServerIcon className="w-4 h-4 text-text-muted" />
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-success uppercase tracking-wider">Online & Healthy</span>
+            <div className="text-lg font-semibold font-mono text-success">{onlineCount}</div>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-success ring-4 ring-success/20"></span>
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-warning uppercase tracking-wider">Degraded</span>
+            <div className="text-lg font-semibold font-mono text-warning">{degradedCount}</div>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-warning ring-4 ring-warning/20"></span>
+        </div>
+        <div className="op-card p-2.5 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-medium text-error uppercase tracking-wider">Offline / Unreachable</span>
+            <div className="text-lg font-semibold font-mono text-error">{offlineCount}</div>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-error ring-4 ring-error/20"></span>
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <FilterBar
+        searchPlaceholder="Filter servers by name, IP, OS..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        filters={[
+          {
+            label: 'Status',
+            options: [
+              { label: 'All Statuses', value: 'all' },
+              { label: 'Online', value: 'online' },
+              { label: 'Degraded', value: 'degraded' },
+              { label: 'Offline', value: 'offline' },
+            ],
+            value: statusFilter,
+            onChange: setStatusFilter,
+          },
+          {
+            label: 'Connection',
+            options: [
+              { label: 'All Modes', value: 'all' },
+              { label: 'Direct SSH', value: 'ssh' },
+              { label: 'Coolify Sync', value: 'coolify' },
+              { label: 'Agent', value: 'agent' },
+            ],
+            value: modeFilter,
+            onChange: setModeFilter,
+          },
+        ]}
+        totalCount={servers.length}
+        filteredCount={filteredServers.length}
+      />
+
+      {/* Server Table */}
       {servers.length === 0 ? (
         <EmptyState
           icon={ServerIcon}
-          title="No servers connected"
-          description="Add a Linux server manually using SSH credentials, or connect a Coolify instance to automatically import all managed servers."
+          title="No infrastructure servers registered"
+          description="Connect your first Linux host via SSH credentials or link a Coolify instance to automatically sync all managed hosts."
           actionText="Add Server (SSH)"
           onAction={() => setShowAddModal(true)}
         />
+      ) : filteredServers.length === 0 ? (
+        <div className="op-card p-8 text-center">
+          <p className="text-xs text-text-muted">No servers match the active filters.</p>
+          <button
+            onClick={() => {
+              setSearch('');
+              setStatusFilter('all');
+              setModeFilter('all');
+            }}
+            className="op-btn-ghost mt-2 text-xs"
+          >
+            Clear all filters
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {servers.map((server) => {
-            const isOnline = server.status === 'online';
-            return (
-              <div
-                key={server.id}
-                onClick={() => onSelectServer(server)}
-                className="op-card p-4 hover:border-border-strong transition-colors cursor-pointer space-y-3 group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="p-2 rounded-md bg-surface-secondary border border-border text-text-muted shrink-0">
-                      <ServerIcon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-semibold text-text-primary group-hover:text-accent transition-colors truncate">
-                        {server.name}
-                      </h4>
-                      <p className="text-[11px] font-mono text-text-muted truncate">
-                        {server.username ? `${server.username}@` : ''}
-                        {server.host}:{server.port}
-                      </p>
-                    </div>
-                  </div>
-                  <StatusIndicator status={server.status} variant="inline" />
-                </div>
+        <div className="op-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="op-table">
+              <thead>
+                <tr>
+                  <th>Server</th>
+                  <th>Mode</th>
+                  <th>Host / Endpoint</th>
+                  <th>OS & Arch</th>
+                  <th>Specs</th>
+                  <th>Docker</th>
+                  <th>Status</th>
+                  <th>Last Seen</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredServers.map((server) => {
+                  const statusMap: Record<ServerStatus, any> = {
+                    online: 'HEALTHY',
+                    degraded: 'DEGRADED',
+                    offline: 'OFFLINE',
+                    unknown: 'UNKNOWN',
+                  };
 
-                {/* Specs grid */}
-                <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-border-subtle text-[11px] font-mono">
-                  <div>
-                    <span className="text-text-muted block text-[10px]">OS / ARCH</span>
-                    <span className="text-text-secondary truncate block">
-                      {server.os || 'Linux'} ({server.arch || 'x86_64'})
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">MODE</span>
-                    <span className="text-text-secondary block capitalize">
-                      {server.connectionMode}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">DOCKER</span>
-                    <span className={server.dockerInstalled ? 'text-success block' : 'text-text-muted block'}>
-                      {server.dockerInstalled ? 'Running' : 'Not installed'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[10px]">HEARTBEAT</span>
-                    <span className="text-text-secondary block truncate">
-                      {server.lastHeartbeatAt ? new Date(server.lastHeartbeatAt).toLocaleTimeString() : 'Unknown'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-text-muted group-hover:text-accent font-medium pt-1">
-                  <span>Open Operational View</span>
-                  <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </div>
-              </div>
-            );
-          })}
+                  return (
+                    <tr
+                      key={server.id}
+                      onClick={() => onSelectServer(server)}
+                      className="cursor-pointer hover:bg-surface-hover transition-colors group"
+                    >
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded bg-surface-secondary border border-border flex items-center justify-center shrink-0 text-text-muted group-hover:text-accent transition-colors">
+                            <ServerIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-xs text-text-primary group-hover:text-accent transition-colors truncate">
+                              {server.name}
+                            </div>
+                            {server.tags && server.tags.length > 0 && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {server.tags.slice(0, 2).map((t, idx) => (
+                                  <span key={idx} className="text-[9px] px-1 py-0.2 rounded bg-surface-tertiary text-text-muted font-mono">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+                          {server.connectionMode}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="font-mono text-[11px] text-text-secondary">
+                          {server.username ? `${server.username}@` : ''}{server.host}:{server.port}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="text-xs text-text-primary truncate max-w-[140px]">
+                          {server.os || 'Linux'}
+                        </div>
+                        <div className="text-[10px] font-mono text-text-muted">
+                          {server.arch || 'x86_64'}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="text-xs font-mono text-text-secondary">
+                          {server.cpuCores ? `${server.cpuCores} Cores` : 'SSH Monitored'}
+                        </div>
+                        {server.memoryBytes ? (
+                          <div className="text-[10px] font-mono text-text-muted">
+                            {(server.memoryBytes / (1024 * 1024 * 1024)).toFixed(1)} GB RAM
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {server.dockerInstalled ? (
+                          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                            <Box className="w-3.5 h-3.5 text-info shrink-0" />
+                            <span className="font-mono text-[11px]">
+                              {server.dockerVersion ? `v${server.dockerVersion.split('.')[0]}` : 'Active'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-text-muted">None</span>
+                        )}
+                      </td>
+                      <td>
+                        <StatusBadge
+                          status={statusMap[server.status] || 'UNKNOWN'}
+                          size="sm"
+                        />
+                      </td>
+                      <td>
+                        <span className="text-xs font-mono text-text-muted">
+                          {server.lastHeartbeatAt
+                            ? new Date(server.lastHeartbeatAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : 'Unknown'}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1 text-text-muted group-hover:text-accent font-medium text-xs">
+                          <span className="hidden sm:inline">Inspect</span>
+                          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Add Server Modal */}
+      {/* Add Server (SSH) Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <ServerIcon className="w-4 h-4 text-text-muted" />
-                <h3 className="font-semibold text-xs text-text-primary">Add Server (SSH)</h3>
+                <div className="p-1.5 rounded bg-surface-secondary text-accent border border-border">
+                  <Terminal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-text-primary">Connect Host via SSH</h3>
+                  <p className="text-[11px] text-text-muted">Enables control plane discovery, disk metrics, and backup orchestration.</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-text-muted hover:text-text-primary cursor-pointer"
+                className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-surface-secondary"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -182,13 +376,13 @@ export const ServersView: React.FC<ServersViewProps> = ({
 
             <form onSubmit={handleCreate} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">Server Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Server Name / Identifier</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Production-01"
+                  placeholder="e.g. prod-db-node-01"
                   className="op-input"
                 />
               </div>
@@ -201,7 +395,7 @@ export const ServersView: React.FC<ServersViewProps> = ({
                     required
                     value={host}
                     onChange={(e) => setHost(e.target.value)}
-                    placeholder="192.168.1.100 or server.domain.com"
+                    placeholder="192.168.1.100 or node.domain.com"
                     className="op-input font-mono"
                   />
                 </div>
@@ -230,26 +424,26 @@ export const ServersView: React.FC<ServersViewProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1">
-                  SSH Private Key (Optional if using password)
+                  SSH Private Key (Recommended)
                 </label>
                 <textarea
                   rows={3}
                   value={privateKey}
                   onChange={(e) => setPrivateKey(e.target.value)}
                   placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
-                  className="op-input font-mono"
+                  className="op-input font-mono text-[11px]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1">
-                  SSH Password (Optional if using key)
+                  SSH Password (Fallback)
                 </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder="Password if not using SSH key"
                   className="op-input font-mono"
                 />
               </div>
@@ -258,12 +452,16 @@ export const ServersView: React.FC<ServersViewProps> = ({
                 <div
                   className={`p-2.5 rounded-md text-xs flex items-center gap-2 ${
                     testResult.success
-                      ? 'bg-success-muted text-success border border-success/30'
-                      : 'bg-error-muted text-error border border-error/30'
+                      ? 'bg-success/10 text-success border border-success/30'
+                      : 'bg-error/10 text-error border border-error/30'
                   }`}
                 >
-                  {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
-                  <span>{testResult.message}</span>
+                  {testResult.success ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="font-mono text-[11px]">{testResult.message}</span>
                 </div>
               )}
 
@@ -274,7 +472,7 @@ export const ServersView: React.FC<ServersViewProps> = ({
                   disabled={testing || !host}
                   className="op-btn-secondary"
                 >
-                  {testing ? 'Testing...' : 'Test Connection'}
+                  {testing ? 'Testing Handshake...' : 'Test Connection'}
                 </button>
                 <div className="flex items-center gap-2">
                   <button
