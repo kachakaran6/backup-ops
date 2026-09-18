@@ -4,8 +4,6 @@ import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('audit')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('audit-logs')
 export class AuditController {
   constructor(private auditService: AuditService) {}

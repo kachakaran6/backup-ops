@@ -5,8 +5,6 @@ import { CreateCredentialDto } from './dto/create-credential.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('credentials')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('credentials')
 export class CredentialController {
   constructor(private credentialService: CredentialService) {}

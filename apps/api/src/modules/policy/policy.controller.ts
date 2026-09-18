@@ -5,8 +5,6 @@ import { CreatePolicyDto } from './dto/create-policy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('policies')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('policies')
 export class PolicyController {
   constructor(private policyService: PolicyService) {}

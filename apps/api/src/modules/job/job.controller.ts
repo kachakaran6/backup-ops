@@ -5,8 +5,6 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('jobs')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('jobs')
 export class JobController {
   constructor(private jobService: JobService) {}
