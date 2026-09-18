@@ -27,8 +27,12 @@ export class AuthService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    await this.bootstrapDefaultOrganization();
-    await this.bootstrapAdminUser();
+    try {
+      await this.bootstrapDefaultOrganization();
+      await this.bootstrapAdminUser();
+    } catch (err: any) {
+      this.logger.error(`Bootstrap organization/admin error: ${err.message}`, err.stack);
+    }
   }
 
   private async bootstrapDefaultOrganization(): Promise<Organization> {
@@ -51,41 +55,64 @@ export class AuthService implements OnApplicationBootstrap {
     ).trim().toLowerCase();
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD') || 'admin@123';
 
-    let user = await this.userRepository.findOne({
-      where: { email: adminEmail },
-    });
-
-    if (!user) {
-      this.logger.log(`Bootstrapping initial admin account for ${adminEmail}`);
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(adminPassword, salt);
-
-      user = this.userRepository.create({
-        email: adminEmail,
-        username: 'admin',
-        displayName: 'System Administrator',
-        passwordHash,
-        role: UserRole.SUPER_ADMIN,
-        status: UserStatus.ACTIVE,
-        preferences: { theme: 'system', language: 'en', timezone: 'UTC' },
+    try {
+      let user = await this.userRepository.findOne({
+        where: [{ email: adminEmail }, { username: 'admin' }],
       });
 
-      user = await this.userRepository.save(user);
-      this.logger.log(`Initial admin user successfully bootstrapped with email ${adminEmail}`);
-    }
+      if (!user) {
+        this.logger.log(`Bootstrapping initial admin account for ${adminEmail}`);
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(adminPassword, salt);
 
-    // Ensure default membership exists for admin
-    const org = await this.bootstrapDefaultOrganization();
-    const membership = await this.membershipRepository.findOne({
-      where: { organizationId: org.id, userId: user.id },
-    });
-    if (!membership) {
-      const newMembership = this.membershipRepository.create({
-        organizationId: org.id,
-        userId: user.id,
-        role: OrgRole.OWNER,
+        user = this.userRepository.create({
+          email: adminEmail,
+          username: 'admin',
+          displayName: 'System Administrator',
+          passwordHash,
+          role: UserRole.SUPER_ADMIN,
+          status: UserStatus.ACTIVE,
+          preferences: { theme: 'system', language: 'en', timezone: 'UTC' },
+        });
+
+        user = await this.userRepository.save(user);
+        this.logger.log(`Initial admin user successfully bootstrapped with email ${adminEmail}`);
+      } else {
+        // Sync email and ensure password matches configured ADMIN_PASSWORD
+        let passwordMatches = false;
+        try {
+          passwordMatches = await bcrypt.compare(adminPassword, user.passwordHash);
+        } catch {
+          passwordMatches = false;
+        }
+
+        if (!passwordMatches) {
+          this.logger.log(`Updating password for administrator account (${adminEmail})`);
+          const salt = await bcrypt.genSalt(10);
+          user.passwordHash = await bcrypt.hash(adminPassword, salt);
+        }
+
+        user.email = adminEmail;
+        user.status = UserStatus.ACTIVE;
+        user.role = UserRole.SUPER_ADMIN;
+        user = await this.userRepository.save(user);
+      }
+
+      // Ensure default membership exists for admin
+      const org = await this.bootstrapDefaultOrganization();
+      const membership = await this.membershipRepository.findOne({
+        where: { organizationId: org.id, userId: user.id },
       });
-      await this.membershipRepository.save(newMembership);
+      if (!membership) {
+        const newMembership = this.membershipRepository.create({
+          organizationId: org.id,
+          userId: user.id,
+          role: OrgRole.OWNER,
+        });
+        await this.membershipRepository.save(newMembership);
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to bootstrap admin user: ${err.message}`, err.stack);
     }
   }
 

@@ -49,6 +49,9 @@ export class BackupService {
           },
         });
       }
+      this.operationQueue.on('error', (err) => {
+        this.logger.warn(`BullMQ Queue warning: ${err.message}`);
+      });
     } catch (err: any) {
       this.logger.warn(`Could not initialize BullMQ Queue: ${err.message}`);
     }

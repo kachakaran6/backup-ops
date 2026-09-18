@@ -34,26 +34,44 @@ import { NotificationModule } from './modules/notification/notification.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const dbUrl = config.get<string>('DATABASE_URL');
+        const host = config.get<string>('POSTGRES_HOST');
         const shouldSync =
           config.get<string>('DB_SYNCHRONIZE') === 'true' ||
           config.get<string>('NODE_ENV') !== 'production';
-        if (dbUrl) {
+
+        const baseOptions = {
+          type: 'postgres' as const,
+          autoLoadEntities: true,
+          synchronize: shouldSync,
+          retryAttempts: 10,
+          retryDelay: 3000,
+        };
+
+        if (host) {
           return {
-            type: 'postgres',
-            url: dbUrl,
-            autoLoadEntities: true,
-            synchronize: shouldSync,
+            ...baseOptions,
+            host,
+            port: Number(config.get<number>('POSTGRES_PORT', 5432)),
+            username: config.get<string>('POSTGRES_USER', 'backup_ops'),
+            password: config.get<string>('POSTGRES_PASSWORD', 'changeme123'),
+            database: config.get<string>('POSTGRES_DB', 'backup_ops'),
           };
         }
+
+        if (dbUrl) {
+          return {
+            ...baseOptions,
+            url: dbUrl,
+          };
+        }
+
         return {
-          type: 'postgres',
-          host: config.get<string>('POSTGRES_HOST', 'localhost'),
-          port: config.get<number>('POSTGRES_PORT', 5432),
+          ...baseOptions,
+          host: 'localhost',
+          port: 5432,
           username: config.get<string>('POSTGRES_USER', 'backup_ops'),
           password: config.get<string>('POSTGRES_PASSWORD', 'backup_ops_password'),
           database: config.get<string>('POSTGRES_DB', 'backup_ops'),
-          autoLoadEntities: true,
-          synchronize: shouldSync,
         };
       },
     }),

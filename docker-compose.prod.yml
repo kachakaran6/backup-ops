@@ -63,7 +63,14 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: backup_ops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: backup_ops
       DATABASE_URL: postgresql://backup_ops:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/backup_ops
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-change-encryption-key-prod}
@@ -137,6 +144,13 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: backup_ops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: backup_ops
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://backup_ops:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/backup_ops
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}

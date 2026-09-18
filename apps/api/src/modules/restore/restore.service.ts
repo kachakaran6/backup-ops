@@ -34,6 +34,9 @@ export class RestoreService {
             port: Number(url.port) || 6379,
           },
         });
+        this.operationQueue.on('error', (err) => {
+          this.logger.warn(`BullMQ restore queue warning: ${err.message}`);
+        });
       }
     } catch (err: any) {
       this.logger.warn(`Could not initialize BullMQ Queue: ${err.message}`);

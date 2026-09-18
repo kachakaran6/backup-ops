@@ -1,6 +1,9 @@
 # ---- Build stage ----
 FROM node:22-alpine AS builder
 
+# Install build dependencies for native modules (bcrypt, node-gyp)
+RUN apk add --no-cache python3 make g++ gcc libc6-compat
+
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
@@ -19,8 +22,8 @@ RUN pnpm --filter backup-ops-api deploy --legacy --prod /prod/api
 # ---- Production stage ----
 FROM node:22-alpine AS production
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Install curl for healthcheck and libc6-compat for native modules
+RUN apk add --no-cache curl libc6-compat
 
 WORKDIR /app
 
