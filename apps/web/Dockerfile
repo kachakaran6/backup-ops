@@ -7,8 +7,9 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY apps/web/package.json ./apps/web/
+ENV NODE_ENV=development
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --prod=false
 
 COPY apps/web/ ./apps/web/
 

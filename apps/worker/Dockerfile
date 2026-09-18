@@ -9,8 +9,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY apps/worker/package.json ./apps/worker/
 COPY packages/types/package.json ./packages/types/
 COPY packages/config/package.json ./packages/config/
+ENV NODE_ENV=development
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --prod=false
 
 COPY packages/ ./packages/
 COPY apps/worker/ ./apps/worker/

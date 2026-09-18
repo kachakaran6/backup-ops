@@ -13,13 +13,14 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
     "noImplicitOverride": false,
     "baseUrl": ".",
     "paths": {
-      "@backup-ops/types": ["../../packages/types/src/index.ts"]
+      "@backup-ops/types": ["../../packages/types/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"]
