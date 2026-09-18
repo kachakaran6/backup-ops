@@ -60,6 +60,8 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-please-change-encryption-key-prod}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
+    volumes:
+      - ${BACKUP_STORAGE_PATH:-/var/lib/backupops/storage}:/var/lib/backupops/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,6 +119,8 @@ services:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://backup_ops:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/backup_ops
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
+    volumes:
+      - ${BACKUP_STORAGE_PATH:-/var/lib/backupops/storage}:/var/lib/backupops/storage
     depends_on:
       postgres:
         condition: service_healthy

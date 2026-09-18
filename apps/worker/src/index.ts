@@ -9,8 +9,16 @@ async function bootstrap() {
   console.log(' Starting BackupOps Asynchronous Worker');
   console.log('====================================================');
 
-  const redisHost = process.env.REDIS_HOST || 'localhost';
-  const redisPort = Number(process.env.REDIS_PORT || 6379);
+  let redisHost = process.env.REDIS_HOST || 'localhost';
+  let redisPort = Number(process.env.REDIS_PORT || 6379);
+
+  if (process.env.REDIS_URL) {
+    try {
+      const u = new URL(process.env.REDIS_URL);
+      if (u.hostname) redisHost = u.hostname;
+      if (u.port) redisPort = Number(u.port);
+    } catch {}
+  }
 
   const dbPool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgresql://backup_ops:backup_ops_password@localhost:5432/backup_ops',

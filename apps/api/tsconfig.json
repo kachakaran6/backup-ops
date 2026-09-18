@@ -16,7 +16,11 @@
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
-    "noImplicitOverride": false
+    "noImplicitOverride": false,
+    "baseUrl": ".",
+    "paths": {
+      "@backup-ops/types": ["../../packages/types/src/index.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

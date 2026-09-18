@@ -1,318 +1,367 @@
-import { Resource, Job, Policy, Credential, AuditLog } from '../types';
+import {
+  Server,
+  Database,
+  StorageDestination,
+  CoolifyConnection,
+  Backup,
+  BackupChain,
+  RestoreJob,
+  Job,
+  Policy,
+  Credential,
+  AuditLog,
+  DashboardStats,
+} from '../types';
 
 const API_BASE = '/api/v1';
 
-// Initial resilient mock data for standalone/offline demo
-let mockResources: Resource[] = [
-  {
-    id: 'res-01',
-    name: 'Primary PostgreSQL 15',
-    description: 'Production transactional database',
-    type: 'database_postgres',
-    category: 'database',
-    status: 'healthy',
-    config: { host: '10.0.1.12', port: 5432, database: 'production_main' },
-    lastCheckedAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 10).toISOString(),
-  },
-  {
-    id: 'res-02',
-    name: 'AWS S3 Cold Storage (us-east-1)',
-    description: 'Offsite encrypted snapshot destination',
-    type: 'storage_s3',
-    category: 'storage',
-    status: 'healthy',
-    config: { bucket: 'corp-backups-immutable', region: 'us-east-1' },
-    lastCheckedAt: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 20).toISOString(),
-  },
-  {
-    id: 'res-03',
-    name: 'Local High-Speed NVMe Storage',
-    description: 'On-premise fast staging storage path',
-    type: 'storage_local',
-    category: 'storage',
-    status: 'healthy',
-    config: { path: '/mnt/fast-storage/backups' },
-    lastCheckedAt: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 30).toISOString(),
-  },
-  {
-    id: 'res-04',
-    name: 'App Server Linux Node 01',
-    description: 'Docker container host filesystem',
-    type: 'server_linux',
-    category: 'server',
-    status: 'healthy',
-    config: { host: '10.0.1.5', port: 22, username: 'devops' },
-    lastCheckedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 5).toISOString(),
-  },
-];
-
-let mockJobs: Job[] = [
-  {
-    id: 'job-9812',
-    operationType: 'backup',
-    sourceResourceId: 'res-01',
-    destinationResourceId: 'res-02',
-    state: 'completed',
-    progress: {
-      percentage: 100,
-      bytesProcessed: 142850000,
-      totalBytes: 142850000,
-      filesProcessed: 48,
-      totalFiles: 48,
-      currentStep: 'Backup completed and verified',
-    },
-    logs: [
-      { timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString(), level: 'info', message: 'Pre-flight resource check passed.' },
-      { timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 1000).toISOString(), level: 'info', message: 'Executing pg_dump stream with ZSTD compression.' },
-      { timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 3000).toISOString(), level: 'info', message: 'Encrypted chunk upload to S3 completed (142.8 MB).' },
-      { timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 4000).toISOString(), level: 'info', message: 'Checksum validation confirmed: sha256:d8a2...3f1c.' },
-    ],
-    startedAt: new Date(Date.now() - 1000 * 3600 * 2).toISOString(),
-    finishedAt: new Date(Date.now() - 1000 * 3600 * 2 + 4500).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 3600 * 2).toISOString(),
-  },
-  {
-    id: 'job-9813',
-    operationType: 'sync',
-    sourceResourceId: 'res-03',
-    destinationResourceId: 'res-02',
-    state: 'running',
-    progress: {
-      percentage: 68,
-      bytesProcessed: 524288000,
-      totalBytes: 768000000,
-      filesProcessed: 312,
-      totalFiles: 450,
-      currentStep: 'Transferring delta chunks to S3 mirror',
-    },
-    logs: [
-      { timestamp: new Date(Date.now() - 1000 * 120).toISOString(), level: 'info', message: 'Indexing differences between source and destination.' },
-      { timestamp: new Date(Date.now() - 1000 * 60).toISOString(), level: 'info', message: 'Delta detected: 450 changed objects.' },
-      { timestamp: new Date(Date.now() - 1000 * 20).toISOString(), level: 'info', message: 'Streaming chunk 312/450 at 45 MB/s.' },
-    ],
-    startedAt: new Date(Date.now() - 1000 * 120).toISOString(),
-    createdAt: new Date(Date.now() - 1000 * 120).toISOString(),
-  },
-];
-
-let mockPolicies: Policy[] = [
-  {
-    id: 'pol-01',
-    name: 'Production PostgreSQL Nightly Full Backup',
-    description: 'Nightly database snapshot with AES-256-GCM encryption',
-    enabled: true,
-    sourceResourceId: 'res-01',
-    destinationResourceId: 'res-02',
-    operationType: 'backup',
-    schedule: {
-      enabled: true,
-      cronExpression: '0 2 * * *',
-      timezone: 'UTC',
-    },
-    retention: {
-      keepDaily: 7,
-      keepWeekly: 4,
-      keepMonthly: 12,
-      deleteOlderThanDays: 90,
-    },
-    options: {
-      compression: 'zstd',
-      encryption: 'aes_256_gcm',
-      verifyChecksum: true,
-      dryRun: false,
-    },
-    lastRunAt: new Date(Date.now() - 1000 * 3600 * 14).toISOString(),
-  },
-  {
-    id: 'pol-02',
-    name: 'Local to Cloud Storage Mirror Sync',
-    description: 'Hourly synchronization of on-prem NVMe storage to offsite S3',
-    enabled: true,
-    sourceResourceId: 'res-03',
-    destinationResourceId: 'res-02',
-    operationType: 'sync',
-    schedule: {
-      enabled: true,
-      cronExpression: '0 * * * *',
-      timezone: 'UTC',
-    },
-    retention: {
-      deleteOlderThanDays: 30,
-    },
-    options: {
-      compression: 'gzip',
-      encryption: 'none',
-      verifyChecksum: true,
-      dryRun: false,
-    },
-    lastRunAt: new Date(Date.now() - 1000 * 3600 * 1).toISOString(),
-  },
-];
-
-let mockCredentials: Credential[] = [
-  {
-    id: 'cred-01',
-    name: 'AWS S3 Access Key (Automated Vault)',
-    type: 'aws_s3',
-    metadata: { keyId: 'AKIA...9412', encrypted: 'AES-256-GCM' },
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 20).toISOString(),
-  },
-  {
-    id: 'cred-02',
-    name: 'Database Cluster Superuser Password',
-    type: 'password',
-    metadata: { username: 'postgres', encrypted: 'AES-256-GCM' },
-    createdAt: new Date(Date.now() - 1000 * 3600 * 24 * 10).toISOString(),
-  },
-];
-
-let mockAuditLogs: AuditLog[] = [
-  {
-    id: 'aud-01',
-    action: 'policy.execute',
-    severity: 'info',
-    resourceId: 'res-01',
-    ipAddress: '127.0.0.1',
-    details: { policyName: 'Production PostgreSQL Nightly Full Backup', trigger: 'scheduler' },
-    timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString(),
-  },
-  {
-    id: 'aud-02',
-    action: 'credential.create',
-    severity: 'warning',
-    resourceId: 'cred-01',
-    ipAddress: '192.168.1.42',
-    details: { credentialName: 'AWS S3 Access Key', algorithm: 'AES-256-GCM' },
-    timestamp: new Date(Date.now() - 1000 * 3600 * 24).toISOString(),
-  },
-  {
-    id: 'aud-03',
-    action: 'resource.connection_test',
-    severity: 'info',
-    resourceId: 'res-01',
-    ipAddress: '127.0.0.1',
-    details: { status: 'healthy', latencyMs: 2 },
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-  },
-];
-
-export async function fetchResources(): Promise<Resource[]> {
+// Dashboard Overview
+export async function fetchDashboardStats(): Promise<DashboardStats> {
   try {
-    const res = await fetch(`${API_BASE}/resources?organizationId=default`, { signal: AbortSignal.timeout(1500) });
-    if (res.ok) return await res.json();
-  } catch {}
-  return [...mockResources];
-}
-
-export async function createResource(data: any): Promise<Resource> {
-  try {
-    const res = await fetch(`${API_BASE}/resources?organizationId=default`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) return await res.json();
-  } catch {}
-  const newRes: Resource = {
-    id: 'res-' + Date.now(),
-    name: data.name,
-    description: data.description,
-    type: data.type,
-    category: data.category,
-    status: 'healthy',
-    config: data.config,
-    createdAt: new Date().toISOString(),
-  };
-  mockResources.unshift(newRes);
-  return newRes;
-}
-
-export async function testResource(id: string): Promise<{ success: boolean; latencyMs: number; message: string }> {
-  try {
-    const res = await fetch(`${API_BASE}/resources/${id}/test?organizationId=default`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/monitoring/dashboard?organizationId=default`);
     if (res.ok) return await res.json();
   } catch {}
   return {
-    success: true,
-    latencyMs: Math.floor(Math.random() * 8) + 2,
-    message: 'Endpoint reachable and authenticated successfully.',
+    infrastructure: { totalServers: 0, onlineServers: 0, offlineServers: 0, coolifyInstances: 0 },
+    databases: { totalDatabases: 0, healthyDatabases: 0, backupOverdueDatabases: 0, unprotectedDatabases: 0 },
+    backups: { last24hSuccessful: 0, last24hFailed: 0, activeOperations: 0, totalArtifacts: 0 },
+    storage: { totalDestinations: 0, usedCapacityBytes: 0, availableCapacityBytes: 0 },
+    recovery: { validChains: 0, brokenChains: 0 },
   };
 }
 
-export async function fetchJobs(): Promise<Job[]> {
+// Coolify Integration
+export async function fetchCoolifyConnections(): Promise<CoolifyConnection[]> {
   try {
-    const res = await fetch(`${API_BASE}/jobs?organizationId=default`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${API_BASE}/coolify?organizationId=default`);
     if (res.ok) return await res.json();
   } catch {}
-  return [...mockJobs];
+  return [];
 }
 
-export async function createJob(data: any): Promise<Job> {
+export async function testCoolify(data: { url: string; apiToken: string }): Promise<{ success: boolean; latencyMs: number; message: string; version?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/jobs?organizationId=default`, {
+    const res = await fetch(`${API_BASE}/coolify/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch (err: any) {
+    return { success: false, latencyMs: 0, message: err.message || 'Connection failed' };
+  }
+  return { success: false, latencyMs: 0, message: 'Server returned error' };
+}
+
+export async function connectCoolify(data: { name: string; url: string; apiToken: string }): Promise<CoolifyConnection | null> {
+  try {
+    const res = await fetch(`${API_BASE}/coolify/connect?organizationId=default`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (res.ok) return await res.json();
   } catch {}
-  const newJob: Job = {
-    id: 'job-' + Math.floor(Math.random() * 9000 + 1000),
-    operationType: data.operationType,
-    sourceResourceId: data.sourceResourceId,
-    destinationResourceId: data.destinationResourceId,
-    state: 'running',
-    progress: {
-      percentage: 20,
-      bytesProcessed: 10485760,
-      totalBytes: 104857600,
-      filesProcessed: 5,
-      totalFiles: 25,
-      currentStep: 'Initializing live snapshot stream...',
-    },
-    logs: [
-      { timestamp: new Date().toISOString(), level: 'info', message: `Job ${data.operationType.toUpperCase()} triggered by operator.` },
-      { timestamp: new Date().toISOString(), level: 'info', message: 'Stream allocated. AES-256-GCM cipher active.' },
-    ],
-    startedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-  };
-  mockJobs.unshift(newJob);
-  return newJob;
+  return null;
 }
 
-export async function fetchPolicies(): Promise<Policy[]> {
+export async function syncCoolify(id: string): Promise<CoolifyConnection | null> {
   try {
-    const res = await fetch(`${API_BASE}/policies?organizationId=default`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${API_BASE}/coolify/${id}/sync?organizationId=default`, { method: 'POST' });
     if (res.ok) return await res.json();
   } catch {}
-  return [...mockPolicies];
+  return null;
+}
+
+export async function removeCoolify(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/coolify/${id}?organizationId=default`, { method: 'DELETE' });
+  } catch {}
+}
+
+// Servers
+export async function fetchServers(): Promise<Server[]> {
+  try {
+    const res = await fetch(`${API_BASE}/servers?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function fetchServer(id: string): Promise<Server | null> {
+  try {
+    const res = await fetch(`${API_BASE}/servers/${id}?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function createServer(data: any): Promise<Server | null> {
+  try {
+    const res = await fetch(`${API_BASE}/servers?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function testSshServer(data: any): Promise<{ success: boolean; latencyMs: number; message: string; os?: string; arch?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/servers/test-ssh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch (err: any) {
+    return { success: false, latencyMs: 0, message: err.message };
+  }
+  return { success: false, latencyMs: 0, message: 'Server returned error' };
+}
+
+export async function fetchServerDatabases(serverId: string): Promise<Database[]> {
+  try {
+    const res = await fetch(`${API_BASE}/servers/${serverId}/databases?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function fetchServerDocker(serverId: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/servers/${serverId}/docker?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return { installed: false, running: false, containers: [], volumes: [] };
+}
+
+export async function removeServer(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/servers/${id}?organizationId=default`, { method: 'DELETE' });
+  } catch {}
+}
+
+// Databases
+export async function fetchDatabases(): Promise<Database[]> {
+  try {
+    const res = await fetch(`${API_BASE}/databases?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function fetchDatabase(id: string): Promise<Database | null> {
+  try {
+    const res = await fetch(`${API_BASE}/databases/${id}?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function createDatabase(data: any): Promise<Database | null> {
+  try {
+    const res = await fetch(`${API_BASE}/databases?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function testDatabase(id: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/databases/${id}/test?organizationId=default`, { method: 'POST' });
+    if (res.ok) return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+  return { success: false, message: 'Connection test failed' };
+}
+
+export async function fetchDatabaseRecovery(id: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/databases/${id}/recovery?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function removeDatabase(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/databases/${id}?organizationId=default`, { method: 'DELETE' });
+  } catch {}
+}
+
+// Storage
+export async function fetchStorage(): Promise<StorageDestination[]> {
+  try {
+    const res = await fetch(`${API_BASE}/storage?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function createStorage(data: any): Promise<StorageDestination | null> {
+  try {
+    const res = await fetch(`${API_BASE}/storage?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function testStorage(data: any): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/storage/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+  return { success: false, message: 'Test failed' };
+}
+
+export async function testExistingStorage(id: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/storage/${id}/test?organizationId=default`, { method: 'POST' });
+    if (res.ok) return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
+  return { success: false, message: 'Test failed' };
+}
+
+export async function removeStorage(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/storage/${id}?organizationId=default`, { method: 'DELETE' });
+  } catch {}
+}
+
+// Backups & Chains
+export async function fetchBackups(): Promise<Backup[]> {
+  try {
+    const res = await fetch(`${API_BASE}/backups?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function fetchBackupChains(databaseId?: string): Promise<BackupChain[]> {
+  try {
+    const url = databaseId
+      ? `${API_BASE}/backups/chains?databaseId=${databaseId}&organizationId=default`
+      : `${API_BASE}/backups/chains?organizationId=default`;
+    const res = await fetch(url);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function triggerBackup(data: {
+  sourceDatabaseId: string;
+  destinationStorageId: string;
+  policyId?: string;
+  type?: string;
+  compression?: string;
+  encryption?: string;
+}): Promise<{ job: Job; backup: Backup } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/backups/trigger?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+export async function verifyBackup(id: string): Promise<Backup | null> {
+  try {
+    const res = await fetch(`${API_BASE}/backups/${id}/verify?organizationId=default`, { method: 'POST' });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+// Restores
+export async function fetchRestoreJobs(): Promise<RestoreJob[]> {
+  try {
+    const res = await fetch(`${API_BASE}/restores?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function createRestoreJob(data: {
+  backupId: string;
+  targetType: string;
+  targetServerId?: string;
+  targetDatabaseId?: string;
+  targetPath?: string;
+  pointInTimeTarget?: string;
+  overwriteConfirmed: boolean;
+}): Promise<RestoreJob | null> {
+  try {
+    const res = await fetch(`${API_BASE}/restores?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
+// Jobs & Operations
+export async function fetchJobs(): Promise<Job[]> {
+  try {
+    const res = await fetch(`${API_BASE}/jobs?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+// Policies
+export async function fetchPolicies(): Promise<Policy[]> {
+  try {
+    const res = await fetch(`${API_BASE}/policies?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
 }
 
 export async function togglePolicy(id: string): Promise<void> {
   try {
     await fetch(`${API_BASE}/policies/${id}/toggle?organizationId=default`, { method: 'POST' });
   } catch {}
-  const pol = mockPolicies.find((p) => p.id === id);
-  if (pol) pol.enabled = !pol.enabled;
 }
 
+// Credentials
 export async function fetchCredentials(): Promise<Credential[]> {
   try {
-    const res = await fetch(`${API_BASE}/credentials?organizationId=default`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${API_BASE}/credentials?organizationId=default`);
     if (res.ok) return await res.json();
   } catch {}
-  return [...mockCredentials];
+  return [];
 }
 
+// Audit Logs
 export async function fetchAuditLogs(): Promise<AuditLog[]> {
   try {
-    const res = await fetch(`${API_BASE}/audit-logs?organizationId=default`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${API_BASE}/audit-logs?organizationId=default`);
     if (res.ok) return await res.json();
   } catch {}
-  return [...mockAuditLogs];
+  return [];
 }

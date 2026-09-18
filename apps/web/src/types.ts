@@ -1,13 +1,180 @@
-export interface Resource {
+export type ServerConnectionMode = 'coolify' | 'ssh' | 'agent';
+export type ServerStatus = 'online' | 'offline' | 'degraded' | 'unknown';
+
+export interface Server {
   id: string;
   name: string;
-  description?: string;
-  type: string;
-  category: 'server' | 'database' | 'storage' | 'agent';
-  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
-  config: Record<string, any>;
-  lastCheckedAt?: string;
+  connectionMode: ServerConnectionMode;
+  coolifyConnectionId?: string;
+  coolifyServerUuid?: string;
+  host: string;
+  port: number;
+  username?: string;
+  credentialId?: string;
+  os?: string;
+  arch?: string;
+  kernel?: string;
+  cpuCores?: number;
+  memoryBytes?: number;
+  diskBytes?: number;
+  dockerInstalled: boolean;
+  dockerVersion?: string;
+  status: ServerStatus;
+  lastHeartbeatAt?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'mongodb' | 'redis';
+export type DatabaseStatus = 'connected' | 'disconnected' | 'unreachable' | 'unknown';
+export type DatabaseProtectionStatus = 'discovered' | 'monitored' | 'protected';
+export type DatabaseRecoveryReadiness = 'ready' | 'degraded' | 'unhealthy' | 'unknown';
+
+export interface Database {
+  id: string;
+  serverId?: string;
+  coolifyConnectionId?: string;
+  coolifyResourceUuid?: string;
+  name: string;
+  type: DatabaseType;
+  version?: string;
+  host: string;
+  port: number;
+  databaseName: string;
+  username?: string;
+  credentialId?: string;
+  status: DatabaseStatus;
+  protectionStatus: DatabaseProtectionStatus;
+  sizeBytes?: number;
+  tableCount?: number;
+  activeConnections?: number;
+  walEnabled?: boolean;
+  walStatus?: 'healthy' | 'warning' | 'disabled' | 'unknown';
+  lastBackupAt?: string;
+  lastSuccessfulBackupAt?: string;
+  backupAgeMinutes?: number;
+  lastBackupStatus?: 'success' | 'failed' | 'running' | 'none';
+  recoveryReadiness: DatabaseRecoveryReadiness;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StorageType = 'local' | 's3' | 'minio' | 'sftp';
+export type StorageStatus = 'connected' | 'degraded' | 'unreachable' | 'unknown';
+
+export interface StorageDestination {
+  id: string;
+  name: string;
+  type: StorageType;
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+  path?: string;
+  credentialId?: string;
+  status: StorageStatus;
+  totalCapacityBytes?: number;
+  usedCapacityBytes?: number;
+  availableCapacityBytes?: number;
+  backupCount: number;
+  lastSuccessfulOperationAt?: string;
+  lastVerificationAt?: string;
   lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CoolifyConnectionStatus = 'connected' | 'disconnected' | 'auth_failed' | 'unreachable' | 'unknown';
+
+export interface CoolifyConnection {
+  id: string;
+  name: string;
+  url: string;
+  teamName?: string;
+  coolifyVersion?: string;
+  connectionStatus: CoolifyConnectionStatus;
+  lastSyncAt?: string;
+  serversDiscovered: number;
+  databasesDiscovered: number;
+  applicationsDiscovered: number;
+  servicesDiscovered: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BackupType = 'base' | 'full' | 'incremental' | 'wal' | 'binlog' | 'snapshot';
+export type BackupVerificationState =
+  | 'pending'
+  | 'upload_verified'
+  | 'checksum_verified'
+  | 'database_verified'
+  | 'restore_tested'
+  | 'failed';
+
+export interface BackupChain {
+  id: string;
+  policyId?: string;
+  sourceDatabaseId?: string;
+  sourceServerId?: string;
+  chainNumber: number;
+  status: 'healthy' | 'broken' | 'pruned';
+  baseBackupId?: string;
+  latestBackupId?: string;
+  totalSizeBytes: number;
+  backupCount: number;
+  lastValidPoint?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Backup {
+  id: string;
+  chainId?: string;
+  parentBackupId?: string;
+  policyId?: string;
+  sourceDatabaseId?: string;
+  sourceServerId?: string;
+  destinationStorageId: string;
+  type: BackupType;
+  sequence: number;
+  storagePath: string;
+  sizeBytes: number;
+  checksumSha256: string;
+  encryption: string;
+  verificationState: BackupVerificationState;
+  verificationError?: string;
+  recoveryPointTime?: string;
+  expiresAt?: string;
+  retentionMark?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RestoreJob {
+  id: string;
+  backupId: string;
+  targetType: 'original' | 'new_database' | 'different_server';
+  targetServerId?: string;
+  targetDatabaseId?: string;
+  targetPath?: string;
+  pointInTimeTarget?: string;
+  overwriteConfirmed: boolean;
+  state: 'queued' | 'planning' | 'running' | 'verifying' | 'completed' | 'failed';
+  progressPercent: number;
+  currentStep: string;
+  logs: Array<{
+    timestamp: string;
+    level: 'info' | 'warn' | 'error' | 'debug';
+    message: string;
+  }>;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
   createdAt: string;
 }
 
@@ -24,6 +191,8 @@ export interface Job {
     filesProcessed: number;
     totalFiles: number;
     currentStep: string;
+    durationSeconds?: number;
+    etaSeconds?: number;
   };
   options?: Record<string, any>;
   steps?: Array<{
@@ -85,4 +254,34 @@ export interface AuditLog {
   ipAddress?: string;
   details: Record<string, any>;
   timestamp: string;
+}
+
+export interface DashboardStats {
+  infrastructure: {
+    totalServers: number;
+    onlineServers: number;
+    offlineServers: number;
+    coolifyInstances: number;
+  };
+  databases: {
+    totalDatabases: number;
+    healthyDatabases: number;
+    backupOverdueDatabases: number;
+    unprotectedDatabases: number;
+  };
+  backups: {
+    last24hSuccessful: number;
+    last24hFailed: number;
+    activeOperations: number;
+    totalArtifacts: number;
+  };
+  storage: {
+    totalDestinations: number;
+    usedCapacityBytes: number;
+    availableCapacityBytes: number;
+  };
+  recovery: {
+    validChains: number;
+    brokenChains: number;
+  };
 }

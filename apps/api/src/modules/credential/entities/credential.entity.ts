@@ -5,6 +5,7 @@ export enum CredentialType {
   PASSWORD = 'password',
   AWS_S3 = 'aws_s3',
   API_TOKEN = 'api_token',
+  DATABASE_PASSWORD = 'database_password',
 }
 
 @Entity('credentials')

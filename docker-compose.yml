@@ -61,6 +61,7 @@ services:
     volumes:
       - ./apps/api/src:/app/src
       - /app/node_modules
+      - ${BACKUP_STORAGE_PATH:-./data/backups}:/var/lib/backupops/storage
     ports:
       - "3000:3000"
     depends_on:
@@ -110,6 +111,7 @@ services:
     volumes:
       - ./apps/worker/src:/app/src
       - /app/node_modules
+      - ${BACKUP_STORAGE_PATH:-./data/backups}:/var/lib/backupops/storage
     depends_on:
       postgres:
         condition: service_healthy

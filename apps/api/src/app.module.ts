@@ -12,6 +12,14 @@ import { JobModule } from './modules/job/job.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
 
+import { CoolifyModule } from './modules/coolify/coolify.module';
+import { ServerModule } from './modules/server/server.module';
+import { DatabaseModule } from './modules/database/database.module';
+import { StorageModule } from './modules/storage/storage.module';
+import { BackupModule } from './modules/backup/backup.module';
+import { RestoreModule } from './modules/restore/restore.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -23,7 +31,9 @@ import { HealthModule } from './modules/health/health.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const dbUrl = config.get<string>('DATABASE_URL');
-        const shouldSync = config.get<string>('DB_SYNCHRONIZE') === 'true' || config.get<string>('NODE_ENV') !== 'production';
+        const shouldSync =
+          config.get<string>('DB_SYNCHRONIZE') === 'true' ||
+          config.get<string>('NODE_ENV') !== 'production';
         if (dbUrl) {
           return {
             type: 'postgres',
@@ -53,6 +63,13 @@ import { HealthModule } from './modules/health/health.module';
     JobModule,
     AuditModule,
     HealthModule,
+    CoolifyModule,
+    ServerModule,
+    DatabaseModule,
+    StorageModule,
+    BackupModule,
+    RestoreModule,
+    MonitoringModule,
   ],
 })
 export class AppModule {}
