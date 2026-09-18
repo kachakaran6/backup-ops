@@ -107,8 +107,14 @@ export class CoolifyProvider {
         };
       }
 
-      const data = await response.json();
-      const version = typeof data === 'string' ? data : (data as any)?.version || 'unknown';
+      const rawText = await response.text();
+      let version = 'unknown';
+      try {
+        const data = JSON.parse(rawText);
+        version = typeof data === 'string' ? data : (data as any)?.version || rawText.trim();
+      } catch {
+        version = rawText.trim().replace(/^"|"$/g, '');
+      }
 
       return {
         success: true,
