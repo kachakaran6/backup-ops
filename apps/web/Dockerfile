@@ -5,13 +5,10 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
-COPY apps/web/package.json ./apps/web/
+COPY . .
 ENV NODE_ENV=development
 
-RUN pnpm install --frozen-lockfile --prod=false
-
-COPY apps/web/ ./apps/web/
+RUN pnpm install --no-frozen-lockfile --prod=false
 
 WORKDIR /app/apps/web
 RUN pnpm run build

@@ -5,20 +5,13 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
-COPY apps/worker/package.json ./apps/worker/
-COPY packages/types/package.json ./packages/types/
-COPY packages/config/package.json ./packages/config/
+COPY . .
 ENV NODE_ENV=development
 
-RUN pnpm install --frozen-lockfile --prod=false
+RUN pnpm install --no-frozen-lockfile --prod=false
 
-COPY packages/ ./packages/
-COPY apps/worker/ ./apps/worker/
-COPY tsconfig.base.json ./
-
-RUN pnpm --filter @backup-ops/types build 2>/dev/null || true
-RUN pnpm --filter @backup-ops/config build 2>/dev/null || true
+RUN pnpm --filter @backup-ops/types build
+RUN pnpm --filter @backup-ops/config build
 RUN pnpm --filter backup-ops-worker build
 
 RUN pnpm --filter backup-ops-worker deploy --legacy --prod /prod/worker
