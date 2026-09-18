@@ -21,7 +21,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - coolify
+      coolify:
+        aliases:
+          - postgres
+      backup-ops-internal:
+        aliases:
+          - postgres
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "backup_ops", "-d", "backup_ops"]
       interval: 10s
@@ -37,7 +42,12 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - coolify
+      coolify:
+        aliases:
+          - redis
+      backup-ops-internal:
+        aliases:
+          - redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -69,7 +79,14 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - coolify
+      coolify:
+        aliases:
+          - api
+          - backupops-api
+      backup-ops-internal:
+        aliases:
+          - api
+          - backupops-api
     expose:
       - "3000"
     labels:
@@ -90,7 +107,14 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     networks:
-      - coolify
+      coolify:
+        aliases:
+          - web
+          - backupops-web
+      backup-ops-internal:
+        aliases:
+          - web
+          - backupops-web
     expose:
       - "80"
     labels:
@@ -124,7 +148,12 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - coolify
+      coolify:
+        aliases:
+          - worker
+      backup-ops-internal:
+        aliases:
+          - worker
 
 volumes:
   postgres_data:
@@ -136,3 +165,6 @@ networks:
   coolify:
     name: coolify
     external: true
+  backup-ops-internal:
+    name: backup-ops-internal
+    driver: bridge

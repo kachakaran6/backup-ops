@@ -49,20 +49,86 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   return res;
 }
 
-// Authentication
-export async function loginApi(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'Authentication failed' }));
-    throw new Error(err.message || 'Invalid credentials');
+// Authentication & API Health
+export async function checkApiHealth(): Promise<{ ok: boolean; status: number; message?: string }> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return { ok: res.ok, status: res.status };
+  } catch (err: any) {
+    return { ok: false, status: 0, message: err.message || 'Connection unreachable' };
   }
+}
+
+export async function loginApi(emailOrUsername: string, password: string): Promise<AuthResponse> {
+  const cleanId = emailOrUsername.trim();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usernameOrEmail: cleanId,
+        email: cleanId,
+        password,
+      }),
+    });
+  } catch (err: any) {
+    throw new Error('Network error: Unable to reach the BackupOps API server. Please check connection or reverse proxy.');
+  }
+
+  if (!res.ok) {
+    if (res.status === 502) {
+      throw new Error('API Gateway 502: Upstream service unavailable. The backend control plane container is currently offline or restarting.');
+    }
+    if (res.status === 503) {
+      throw new Error('API Gateway 503: Service temporarily unavailable. The backend is completing initialization.');
+    }
+    if (res.status === 504) {
+      throw new Error('API Gateway 504: Gateway timeout contacting the control plane.');
+    }
+    if (res.status === 401) {
+      throw new Error('Invalid credentials. Check your email/username and password.');
+    }
+    const err = await res.json().catch(() => ({ message: 'Authentication request failed' }));
+    throw new Error(err.message || 'Authentication request failed');
+  }
+
   const data: AuthResponse = await res.json();
   setAuthToken(data.accessToken);
   return data;
+}
+
+export async function registerApi(data: {
+  email: string;
+  username: string;
+  password: string;
+  displayName: string;
+}): Promise<AuthResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch (err: any) {
+    throw new Error('Network error: Unable to reach the BackupOps API server.');
+  }
+
+  if (!res.ok) {
+    if (res.status === 502 || res.status === 503) {
+      throw new Error(`API Gateway ${res.status}: Backend service is restarting or unavailable.`);
+    }
+    const err = await res.json().catch(() => ({ message: 'Registration failed' }));
+    throw new Error(err.message || 'Registration failed');
+  }
+
+  const result: AuthResponse = await res.json();
+  setAuthToken(result.accessToken);
+  return result;
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
