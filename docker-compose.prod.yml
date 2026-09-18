@@ -5,6 +5,8 @@ name: backup-ops
 # ────────────────────────────────────────────────────────────────────────────
 # BackupOps Production — Docker Compose
 # Deployed via Coolify — builds from source in the repository
+# All services share the 'coolify' network so Docker DNS resolves service
+# names (api, postgres, redis) correctly within the Coolify environment.
 # ────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -19,9 +21,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      backup-ops-network:
-        aliases:
-          - postgres
+      - coolify
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "backup_ops", "-d", "backup_ops"]
       interval: 10s
@@ -37,9 +37,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      backup-ops-network:
-        aliases:
-          - redis
+      - coolify
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -71,10 +69,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      backup-ops-network:
-        aliases:
-          - api
-      coolify:
+      - coolify
     expose:
       - "3000"
     labels:
@@ -86,7 +81,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 45s
+      start_period: 60s
 
   # ── Web (React/Vite → nginx) ──────────────────────────────────────────────
   web:
@@ -95,10 +90,7 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     networks:
-      backup-ops-network:
-        aliases:
-          - web
-      coolify:
+      - coolify
     expose:
       - "80"
     labels:
@@ -132,7 +124,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - backup-ops-network
+      - coolify
 
 volumes:
   postgres_data:
@@ -141,8 +133,6 @@ volumes:
     driver: local
 
 networks:
-  backup-ops-network:
-    driver: bridge
   coolify:
     name: coolify
     external: true
