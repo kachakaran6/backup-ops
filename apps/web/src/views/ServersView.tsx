@@ -111,14 +111,9 @@ export const ServersView: React.FC<ServersViewProps> = ({
       {/* Top Operational Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Infrastructure Servers
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {servers.length} managed
-            </span>
-          </div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Infrastructure Servers
+          </h1>
           <p className="text-xs text-text-muted mt-0.5">
             Physical, virtual, and cloud nodes connected via Direct SSH or imported from Coolify.
           </p>
@@ -272,20 +267,11 @@ export const ServersView: React.FC<ServersViewProps> = ({
                             <div className="font-semibold text-xs text-text-primary group-hover:text-accent transition-colors truncate">
                               {server.name}
                             </div>
-                            {server.tags && server.tags.length > 0 && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                {server.tags.slice(0, 2).map((t, idx) => (
-                                  <span key={idx} className="text-[9px] px-1 py-0.2 rounded bg-surface-tertiary text-text-muted font-mono">
-                                    {t}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+                        <span className="text-xs font-mono uppercase text-text-secondary">
                           {server.connectionMode}
                         </span>
                       </td>
@@ -313,16 +299,11 @@ export const ServersView: React.FC<ServersViewProps> = ({
                         ) : null}
                       </td>
                       <td>
-                        {server.dockerInstalled ? (
-                          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                            <Box className="w-3.5 h-3.5 text-info shrink-0" />
-                            <span className="font-mono text-[11px]">
-                              {server.dockerVersion ? `v${server.dockerVersion.split('.')[0]}` : 'Active'}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-text-muted">None</span>
-                        )}
+                        <span className="font-mono text-xs text-text-secondary">
+                          {server.dockerInstalled
+                            ? (server.dockerVersion ? `v${server.dockerVersion.split('.')[0]}` : 'Ready')
+                            : 'None'}
+                        </span>
                       </td>
                       <td>
                         <StatusBadge

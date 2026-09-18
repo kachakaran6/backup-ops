@@ -117,7 +117,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold text-text-primary truncate">{server.name}</h1>
               <StatusBadge status={statusMap[server.status] || 'UNKNOWN'} size="sm" />
-              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              <span className="text-xs font-mono uppercase text-text-muted">
                 {server.connectionMode}
               </span>
             </div>
@@ -378,7 +378,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                         {db.name}
                       </td>
                       <td>
-                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+                        <span className="text-xs font-mono uppercase text-text-muted">
                           {db.type}
                         </span>
                       </td>

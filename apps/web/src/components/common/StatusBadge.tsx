@@ -37,9 +37,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 }) => {
   const norm = (status || 'unknown').toLowerCase().trim() as OperationalStatus;
 
-  let styleClasses = 'bg-surface-secondary text-text-muted border-border';
+  let textColor = 'text-text-muted';
   let dotColor = 'bg-text-muted';
-  let isPulsing = false;
 
   switch (norm) {
     case 'healthy':
@@ -47,66 +46,57 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     case 'active':
     case 'completed':
     case 'success':
-      styleClasses = 'bg-success/10 text-success border-success/30';
+      textColor = 'text-success';
       dotColor = 'bg-success';
       break;
 
     case 'running':
     case 'verifying':
     case 'planning':
-      styleClasses = 'bg-info/10 text-info border-info/30';
+      textColor = 'text-info';
       dotColor = 'bg-info';
-      isPulsing = true;
       break;
 
     case 'queued':
-      styleClasses = 'bg-brand/10 text-brand border-brand/30';
-      dotColor = 'bg-brand';
-      isPulsing = true;
+      textColor = 'text-brand-primary';
+      dotColor = 'bg-brand-primary';
       break;
 
     case 'warning':
     case 'degraded':
     case 'overdue':
-      styleClasses = 'bg-warning/10 text-warning border-warning/30';
+      textColor = 'text-warning';
       dotColor = 'bg-warning';
       break;
 
     case 'failed':
     case 'error':
-      styleClasses = 'bg-error/10 text-error border-error/30';
+      textColor = 'text-error';
       dotColor = 'bg-error';
       break;
 
     case 'offline':
     case 'stopped':
     case 'cancelled':
-      styleClasses = 'bg-surface-secondary text-text-muted border-border';
-      dotColor = 'bg-text-muted';
+      textColor = 'text-text-muted';
+      dotColor = 'bg-text-muted/60';
       break;
 
     default:
-      styleClasses = 'bg-surface-secondary text-text-secondary border-border';
+      textColor = 'text-text-secondary';
       dotColor = 'bg-text-muted';
       break;
   }
 
-  const sizeClasses = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-2 py-0.5';
+  const textSize = size === 'sm' ? 'text-[10.5px]' : 'text-xs';
   const displayLabel = label || norm.toUpperCase();
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-mono font-medium rounded border uppercase tracking-wider ${sizeClasses} ${styleClasses} ${className}`}
+      className={`inline-flex items-center gap-1.5 font-mono font-medium tracking-wide ${textSize} ${textColor} ${className}`}
     >
       {showDot && (
-        <span className="relative flex h-1.5 w-1.5 shrink-0">
-          {isPulsing && (
-            <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${dotColor}`}
-            />
-          )}
-          <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColor}`} />
-        </span>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
       )}
       <span>{displayLabel}</span>
     </span>

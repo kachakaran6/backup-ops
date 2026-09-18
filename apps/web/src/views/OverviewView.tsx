@@ -154,14 +154,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       {!hasInfrastructure && (
         <div className="p-4 sm:p-5 rounded-lg bg-surface border border-brand/30 bg-brand/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1 max-w-2xl">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-brand/10 text-brand border border-brand/25">
-                ONBOARDING
-              </span>
-              <h3 className="text-xs sm:text-sm font-semibold text-text-primary">
-                Connect your infrastructure to orchestrate backups
-              </h3>
-            </div>
+            <h3 className="text-xs sm:text-sm font-semibold text-text-primary">
+              Connect your infrastructure to orchestrate backups
+            </h3>
             <p className="text-xs text-text-secondary leading-relaxed">
               BackupOps keeps your data in your own infrastructure. Connect your self-hosted Coolify
               instance for automatic discovery, or register a Linux host via SSH.
@@ -296,8 +291,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   Attention Required
                 </h4>
               </div>
-              <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-surface-secondary border border-border text-text-muted">
-                {attentionItems.length} ISSUES
+              <span className="text-xs font-mono text-text-muted">
+                {attentionItems.length} issues
               </span>
             </div>
 
@@ -505,7 +500,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                       {databases.find((d) => d.id === b.sourceDatabaseId)?.name || b.sourceDatabaseId || 'Database'}
                     </td>
                     <td>
-                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-surface-secondary text-text-secondary border border-border uppercase">
+                      <span className="text-xs font-mono text-text-secondary uppercase">
                         {b.type}
                       </span>
                     </td>
@@ -516,8 +511,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                       {formatBytes(b.sizeBytes)}
                     </td>
                     <td>
-                      <span className="text-[10px] font-mono text-success font-medium">
-                        SHA-256 Verified
+                      <span className="text-xs font-mono text-success inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Verified
                       </span>
                     </td>
                     <td className="font-mono text-text-muted text-xs whitespace-nowrap">

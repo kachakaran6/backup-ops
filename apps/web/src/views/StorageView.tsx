@@ -125,14 +125,9 @@ export const StorageView: React.FC<StorageViewProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Storage Pools & Targets
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {totalDestinations} destinations
-            </span>
-          </div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Storage Pools &amp; Targets
+          </h1>
           <p className="text-xs text-text-muted mt-0.5">
             Encrypted target endpoints for logical database dumps, physical Base snapshots, and continuous WAL segments.
           </p>

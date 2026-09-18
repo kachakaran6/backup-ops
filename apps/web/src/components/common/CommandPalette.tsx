@@ -44,7 +44,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { theme, setTheme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme, setPalette } = useTheme();
 
   const commands: CommandItem[] = [
     // Navigation
@@ -205,12 +205,57 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
     },
     {
       id: 'act-theme',
-      category: 'Actions',
+      category: 'Appearance',
       title: `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`,
       description: 'Toggle visual appearance between Dark and Light mode',
       icon: theme === 'dark' ? Sun : Moon,
       action: () => { toggleTheme(); onClose(); },
       keywords: ['theme', 'dark', 'light', 'mode', 'color'],
+    },
+    {
+      id: 'palette-amber',
+      category: 'Themes',
+      title: 'Theme: Warm Amber',
+      description: 'Warm Orange and Deep Charcoal signature',
+      icon: Sun,
+      action: () => { setPalette('amber'); onClose(); },
+      keywords: ['theme', 'amber', 'orange', 'charcoal', 'color'],
+    },
+    {
+      id: 'palette-indigo',
+      category: 'Themes',
+      title: 'Theme: Royal Indigo',
+      description: 'Royal Indigo with Soft Sky Blue',
+      icon: Sun,
+      action: () => { setPalette('indigo'); onClose(); },
+      keywords: ['theme', 'indigo', 'blue', 'sky', 'color'],
+    },
+    {
+      id: 'palette-emerald',
+      category: 'Themes',
+      title: 'Theme: Cyber Emerald',
+      description: 'Vibrant Cyber Emerald with Midnight Obsidian',
+      icon: Sun,
+      action: () => { setPalette('emerald'); onClose(); },
+      keywords: ['theme', 'emerald', 'green', 'cyber', 'color'],
+    },
+    {
+      id: 'palette-violet',
+      category: 'Themes',
+      title: 'Theme: Electric Violet',
+      description: 'Royal Violet with Azure & Bright Cyan',
+      icon: Sun,
+      action: () => { setPalette('violet'); onClose(); },
+      keywords: ['theme', 'violet', 'purple', 'azure', 'color'],
+    },
+    {
+      id: 'palette-neon',
+      category: 'Themes',
+      title: 'Theme: Neon Orchid',
+      description: 'Neon Orchid Purple with Mint & Coral',
+      icon: Sun,
+      action: () => { setPalette('neon'); onClose(); },
+      keywords: ['theme', 'neon', 'orchid', 'mint', 'coral', 'color'],
     },
   ];
 

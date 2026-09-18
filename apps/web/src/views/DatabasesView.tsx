@@ -120,14 +120,9 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
       {/* Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Database Workloads
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {databases.length} registered
-            </span>
-          </div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Database Workloads
+          </h1>
           <p className="text-xs text-text-muted mt-0.5">
             PostgreSQL, MySQL, MariaDB, and Redis instances configured for logical dumps and continuous Base + WAL archiving.
           </p>
@@ -281,7 +276,7 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
                         </div>
                       </td>
                       <td>
-                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+                        <span className="text-xs font-mono uppercase text-text-secondary">
                           {db.type}
                         </span>
                       </td>
@@ -306,15 +301,9 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
                         </span>
                       </td>
                       <td>
-                        {db.walEnabled ? (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/30 font-medium">
-                            PITR ACTIVE
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono text-text-muted">
-                            Logical only
-                          </span>
-                        )}
+                        <span className="text-xs font-mono text-text-muted">
+                          {db.walEnabled ? 'PITR Active' : 'Logical only'}
+                        </span>
                       </td>
                       <td>
                         <StatusBadge

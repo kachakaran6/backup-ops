@@ -95,16 +95,11 @@ export const OperationsView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Operations & Worker Queues
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {jobs.length} tracked
-            </span>
-          </div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Operations &amp; Queue Telemetry
+          </h1>
           <p className="text-xs text-text-muted mt-0.5">
-            BullMQ distributed worker queues orchestrating asynchronous database streams, hashing, and restore routines.
+            Distributed worker queues orchestrating asynchronous database streams, hashing, and restore routines.
           </p>
         </div>
 
@@ -205,7 +200,7 @@ export const OperationsView: React.FC = () => {
                     className="cursor-pointer hover:bg-surface-hover transition-colors font-mono"
                   >
                     <td>
-                      <span className="uppercase text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-secondary text-text-primary border border-border">
+                      <span className="uppercase text-xs font-mono font-semibold text-text-primary">
                         {job.operationType}
                       </span>
                     </td>

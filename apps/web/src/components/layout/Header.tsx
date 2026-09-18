@@ -128,31 +128,27 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Live System Health Badge */}
+        {/* Live System Health Indicator */}
         <div
-          className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium border ${
-            apiHealth === 'healthy'
-              ? 'bg-success/10 text-success border-success/30'
-              : apiHealth === 'unreachable'
-              ? 'bg-error/10 text-error border-error/30'
-              : 'bg-surface-secondary text-text-muted border-border'
-          }`}
+          className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs font-mono text-text-muted"
           title={
             apiHealth === 'healthy'
-              ? 'Control Plane API operational'
+              ? 'Control Plane API operational (200 OK)'
               : 'Control Plane API offline or unreachable'
           }
         >
           <span
-            className={`w-1.5 h-1.5 rounded-full ${
+            className={`w-2 h-2 rounded-full ${
               apiHealth === 'healthy'
-                ? 'bg-success animate-pulse'
+                ? 'bg-success'
                 : apiHealth === 'unreachable'
                 ? 'bg-error'
                 : 'bg-text-muted'
             }`}
           />
-          <span>{apiHealth === 'healthy' ? 'API LIVE' : apiHealth === 'unreachable' ? 'API OFFLINE' : 'CHECKING'}</span>
+          <span className="text-[11px] font-medium tracking-wide uppercase">
+            {apiHealth === 'healthy' ? 'API Online' : apiHealth === 'unreachable' ? 'API Offline' : 'Checking'}
+          </span>
         </div>
 
         {/* Refresh button */}
@@ -192,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => onQuickAction('backup')}
               className="op-btn-primary !py-1 !px-2.5 !text-xs"
             >
-              <Shield className="w-3 h-3" />
+              <Plus className="w-3 h-3" />
               <span>Backup</span>
             </button>
           </div>
@@ -241,9 +237,9 @@ export const Header: React.FC<HeaderProps> = ({
                   <p className="text-[11px] text-text-muted truncate font-mono">
                     {user?.email || 'admin@gmail.com'}
                   </p>
-                  <span className="inline-block mt-1 text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-brand/10 text-brand border border-brand/20 uppercase">
-                    {user?.role || 'SUPER_ADMIN'}
-                  </span>
+                  <p className="mt-1 text-[10px] font-mono text-text-muted uppercase">
+                    {user?.role || 'Administrator'}
+                  </p>
                 </div>
 
                 <div className="py-1">

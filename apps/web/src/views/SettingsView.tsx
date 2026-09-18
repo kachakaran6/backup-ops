@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useControlPlane } from '../context/ControlPlaneContext';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, PaletteMode } from '../context/ThemeContext';
 import {
   Settings,
   User,
@@ -18,12 +18,59 @@ import {
   Moon,
   Monitor,
   Check,
+  Palette,
 } from 'lucide-react';
+
+interface ThemePaletteOption {
+  id: PaletteMode;
+  name: string;
+  description: string;
+  primaryColors: string[];
+  supportingColors: string[];
+}
+
+const PALETTE_OPTIONS: ThemePaletteOption[] = [
+  {
+    id: 'amber',
+    name: 'Warm Amber',
+    description: 'Signature Warm Orange with Deep Charcoal',
+    primaryColors: ['#F29F67', '#1E1E2C'],
+    supportingColors: ['#3B8FF3', '#34B1AA', '#E0B50F'],
+  },
+  {
+    id: 'indigo',
+    name: 'Royal Indigo',
+    description: 'Deep Royal Indigo with Soft Sky Blue',
+    primaryColors: ['#4B49AC', '#98BDFF'],
+    supportingColors: ['#7DA0FA', '#7978E9', '#F3797E'],
+  },
+  {
+    id: 'emerald',
+    name: 'Cyber Emerald',
+    description: 'Vibrant Cyber Emerald with Midnight Obsidian',
+    primaryColors: ['#38CE3C', '#181824'],
+    supportingColors: ['#FF4D6B', '#FFDE73', '#8E32E9'],
+  },
+  {
+    id: 'violet',
+    name: 'Electric Violet',
+    description: 'Royal Violet with Azure & Bright Cyan',
+    primaryColors: ['#6F42C1', '#007BFF'],
+    supportingColors: ['#00CCCC', '#0DCAF0', '#17A2B8'],
+  },
+  {
+    id: 'neon',
+    name: 'Neon Orchid',
+    description: 'Neon Orchid Purple with Mint & Coral',
+    primaryColors: ['#A05AFF', '#1BCFB4'],
+    supportingColors: ['#4BCBEB', '#FE9496', '#9E58FF'],
+  },
+];
 
 export const SettingsView: React.FC = () => {
   const { user, logout } = useAuth();
-  const { servers, databases, backups, refresh, isRefreshing } = useControlPlane();
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { servers, databases, refresh, isRefreshing } = useControlPlane();
+  const { theme, setTheme, resolvedTheme, palette, setPalette } = useTheme();
   const [cacheCleared, setCacheCleared] = useState(false);
 
   const handleClearCache = () => {
@@ -36,18 +83,13 @@ export const SettingsView: React.FC = () => {
     <div className="space-y-4 max-w-5xl mx-auto">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-md bg-surface-secondary border border-border text-brand-primary">
-            <Settings className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Control Plane Settings &amp; Preferences
-            </h1>
-            <p className="text-xs text-text-muted mt-0.5">
-              Operator identity, theme appearance, cryptographic vault status, and runtime diagnostics.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Settings &amp; Preferences
+          </h1>
+          <p className="text-xs text-text-muted mt-0.5">
+            Operator profile, custom color palettes, display modes, and runtime diagnostics.
+          </p>
         </div>
 
         <button
@@ -60,19 +102,104 @@ export const SettingsView: React.FC = () => {
         </button>
       </div>
 
-      {/* Theme Appearance Mode Card */}
+      {/* 5 Color Theme Palettes Switcher */}
+      <div className="op-card p-4 space-y-3">
+        <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <div className="flex items-center gap-2">
+            <Palette className="w-4 h-4 text-brand-primary" />
+            <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
+              Color Theme Palettes (5 Presets)
+            </h2>
+          </div>
+          <span className="text-xs font-mono text-brand-primary font-medium">
+            Active: {PALETTE_OPTIONS.find((p) => p.id === palette)?.name || 'Warm Amber'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+          {PALETTE_OPTIONS.map((p) => {
+            const isSelected = palette === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPalette(p.id)}
+                className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer group ${
+                  isSelected
+                    ? 'border-brand-primary bg-brand-primary/10 ring-1 ring-brand-primary'
+                    : 'border-border bg-surface-secondary hover:border-border-strong hover:bg-surface-elevated'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-text-primary">
+                      {p.name}
+                    </span>
+                    {isSelected ? (
+                      <Check className="w-4 h-4 text-brand-primary shrink-0" />
+                    ) : (
+                      <span className="w-3.5 h-3.5 rounded-full border border-border group-hover:border-text-muted" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-muted leading-tight mb-3">
+                    {p.description}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 pt-2 border-t border-border/50">
+                  {/* Primary Color Swatch */}
+                  <div>
+                    <span className="text-[9px] font-mono uppercase text-text-muted block mb-0.5">
+                      Primary
+                    </span>
+                    <div className="flex h-3.5 rounded overflow-hidden border border-border">
+                      {p.primaryColors.map((color, idx) => (
+                        <div
+                          key={idx}
+                          style={{ backgroundColor: color }}
+                          className="flex-1"
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Supporting Color Swatch */}
+                  <div>
+                    <span className="text-[9px] font-mono uppercase text-text-muted block mb-0.5">
+                      Supporting
+                    </span>
+                    <div className="flex h-2.5 rounded overflow-hidden border border-border">
+                      {p.supportingColors.map((color, idx) => (
+                        <div
+                          key={idx}
+                          style={{ backgroundColor: color }}
+                          className="flex-1"
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Surface Appearance Mode (Dark / Light / System) */}
       <div className="op-card p-4 space-y-3">
         <div className="flex items-center justify-between border-b border-border pb-2.5">
           <div className="space-y-0.5">
-            <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
-              Console Appearance &amp; Contrast Mode
+            <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
+              Surface Brightness Mode
             </h2>
             <p className="text-[11px] text-text-muted">
-              Select your interface theme. Both modes are built with high-density infrastructure tokens.
+              Select between dark foundation and high-contrast light mode.
             </p>
           </div>
-          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-            Active: {resolvedTheme}
+          <span className="text-xs font-mono text-text-muted uppercase">
+            {resolvedTheme}
           </span>
         </div>
 
@@ -92,7 +219,7 @@ export const SettingsView: React.FC = () => {
                 <span className="text-xs font-semibold text-text-primary">Dark Operational</span>
               </div>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                Deep Charcoal (#1E1E2C) foundation tuned for low eye fatigue in SOC &amp; SRE setups.
+                Charcoal foundation tuned for low eye fatigue in long operations sessions.
               </p>
             </div>
             {theme === 'dark' && <Check className="w-4 h-4 text-brand-primary shrink-0" />}
@@ -113,7 +240,7 @@ export const SettingsView: React.FC = () => {
                 <span className="text-xs font-semibold text-text-primary">Light Operational</span>
               </div>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                Soft neutral background with clear borders and Borg-inspired operational clarity.
+                Clean light surfaces with crisp borders and high-contrast typography.
               </p>
             </div>
             {theme === 'light' && <Check className="w-4 h-4 text-brand-primary shrink-0" />}
@@ -134,7 +261,7 @@ export const SettingsView: React.FC = () => {
                 <span className="text-xs font-semibold text-text-primary">System Adaptive</span>
               </div>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                Automatically matches your operating system preference via CSS media queries.
+                Synchronizes automatically with your operating system appearance preference.
               </p>
             </div>
             {theme === 'system' && <Check className="w-4 h-4 text-brand-primary shrink-0" />}
@@ -146,29 +273,26 @@ export const SettingsView: React.FC = () => {
       <div className="op-card p-4 space-y-3">
         <div className="flex items-center gap-2 pb-2.5 border-b border-border">
           <User className="w-4 h-4 text-brand-primary" />
-          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
             Active Operator Session
           </h2>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs font-mono">
           <div className="bg-surface-secondary p-2.5 rounded border border-border">
-            <div className="text-text-muted mb-1 text-[10px] uppercase">Authenticated Email</div>
+            <div className="text-text-muted mb-1 text-[10px] uppercase">Email</div>
             <div className="font-semibold text-text-primary truncate">{user?.email || 'admin@gmail.com'}</div>
           </div>
           <div className="bg-surface-secondary p-2.5 rounded border border-border">
-            <div className="text-text-muted mb-1 text-[10px] uppercase">Username / ID</div>
+            <div className="text-text-muted mb-1 text-[10px] uppercase">Username</div>
             <div className="font-semibold text-text-primary truncate">{user?.username || 'admin'}</div>
           </div>
           <div className="bg-surface-secondary p-2.5 rounded border border-border">
-            <div className="text-text-muted mb-1 text-[10px] uppercase">Access Role</div>
-            <div className="inline-flex items-center gap-1 text-success font-medium">
-              <Shield className="w-3 h-3" />
-              <span>{user?.role?.toUpperCase() || 'SUPER_ADMIN'}</span>
-            </div>
+            <div className="text-text-muted mb-1 text-[10px] uppercase">Role</div>
+            <div className="font-semibold text-text-primary truncate">{user?.role || 'Administrator'}</div>
           </div>
           <div className="bg-surface-secondary p-2.5 rounded border border-border">
-            <div className="text-text-muted mb-1 text-[10px] uppercase">Workspace Org</div>
+            <div className="text-text-muted mb-1 text-[10px] uppercase">Organization</div>
             <div className="text-text-secondary truncate">{user?.organizationId || 'default'}</div>
           </div>
         </div>
@@ -176,89 +300,32 @@ export const SettingsView: React.FC = () => {
         <div className="pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-xs text-text-muted flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-            <span>Session protected by cryptographic JWT bearer tokens with automatic renewal.</span>
+            <span>Protected by cryptographic JWT bearer tokens with automatic session refresh.</span>
           </div>
           <button
             onClick={logout}
             className="op-btn-danger self-start sm:self-auto"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Terminate Session</span>
+            <span>Sign Out</span>
           </button>
         </div>
       </div>
 
-      {/* Platform & Runtime Diagnostics */}
-      <div className="op-card p-4 space-y-3">
-        <div className="flex items-center gap-2 pb-2.5 border-b border-border">
-          <Layers className="w-4 h-4 text-brand-primary" />
-          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
-            Control Plane Architecture &amp; Health
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="p-3 rounded bg-surface-secondary border border-border space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-text-primary flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-brand-primary" />
-                Infrastructure Registry
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-surface text-text-muted font-mono text-[10px] border border-border">
-                {servers.length} Hosts
-              </span>
-            </div>
-            <p className="text-text-muted text-[11px] leading-relaxed">
-              Idempotent server deduplication active with composite provider keys and stable UUID mapping.
-            </p>
-          </div>
-
-          <div className="p-3 rounded bg-surface-secondary border border-border space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-text-primary flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-brand-primary" />
-                Database Engines
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-surface text-text-muted font-mono text-[10px] border border-border">
-                {databases.length} Databases
-              </span>
-            </div>
-            <p className="text-text-muted text-[11px] leading-relaxed">
-              PostgreSQL Base+WAL and MySQL/MariaDB engines with live connection telemetry and PITR readiness.
-            </p>
-          </div>
-
-          <div className="p-3 rounded bg-surface-secondary border border-border space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-text-primary flex items-center gap-1.5">
-                <Key className="w-3.5 h-3.5 text-brand-primary" />
-                Secrets &amp; Encryption
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-surface text-text-muted font-mono text-[10px] border border-border">
-                AES-256-GCM
-              </span>
-            </div>
-            <p className="text-text-muted text-[11px] leading-relaxed">
-              Zero plaintext storage for SSH private keys, provider credentials, and SMTP/Telegram bot tokens.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Diagnostics & Client Storage */}
+      {/* Diagnostics & Cache Control */}
       <div className="op-card p-4 space-y-3">
         <div className="flex items-center gap-2 pb-2.5 border-b border-border">
           <Sliders className="w-4 h-4 text-brand-primary" />
-          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
-            Operational Diagnostics &amp; Cache Control
+          <h2 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
+            Cache &amp; Storage Control
           </h2>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
           <div>
-            <div className="font-semibold text-text-primary">Clear Client Route Cache</div>
+            <div className="font-semibold text-text-primary">Reset Client Storage Cache</div>
             <div className="text-text-muted mt-0.5">
-              Reset cached session queries and force fresh state synchronization without logging out.
+              Clears browser session caches and triggers fresh state queries.
             </div>
           </div>
 
@@ -267,7 +334,7 @@ export const SettingsView: React.FC = () => {
             className="op-btn-secondary self-start sm:self-auto"
           >
             <RefreshCw className="w-3.5 h-3.5 text-brand-primary" />
-            <span>{cacheCleared ? 'Cache Purged!' : 'Purge Client Cache'}</span>
+            <span>{cacheCleared ? 'Cache Cleared!' : 'Clear Client Cache'}</span>
           </button>
         </div>
       </div>

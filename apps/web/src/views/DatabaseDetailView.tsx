@@ -93,7 +93,7 @@ export const DatabaseDetailView: React.FC<DatabaseDetailViewProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold text-text-primary truncate">{database.name}</h1>
               <StatusBadge status={database.status === 'connected' ? 'HEALTHY' : 'FAILED'} size="sm" />
-              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
+              <span className="text-xs font-mono uppercase text-text-muted">
                 {database.type}
               </span>
             </div>
@@ -316,7 +316,7 @@ export const DatabaseDetailView: React.FC<DatabaseDetailViewProps> = ({
                 {backups.map((b) => (
                   <tr key={b.id} className="hover:bg-surface-hover transition-colors">
                     <td>
-                      <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-surface-secondary border border-border text-text-primary">
+                      <span className="text-xs font-mono font-semibold uppercase text-text-primary">
                         {b.type} #{b.sequence || 1}
                       </span>
                     </td>

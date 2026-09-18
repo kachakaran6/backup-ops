@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Shield,
   Eye,
   EyeOff,
   Lock,
@@ -8,13 +7,13 @@ import {
   Mail,
   AlertTriangle,
   ArrowRight,
-  Sparkles,
   RefreshCw,
   CheckCircle2,
   Server,
   UserPlus,
   LogIn,
 } from 'lucide-react';
+import { BrandLogo } from '../components/common/BrandLogo';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as api from '../services/api';
@@ -124,8 +123,8 @@ export const LoginView: React.FC = () => {
       <div className="w-full max-w-[420px] space-y-4 relative z-10">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-surface border border-border shadow-sm mb-1">
-            <Shield className="w-5 h-5 text-brand-primary" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-surface border border-border shadow-sm mb-1 text-brand-primary">
+            <BrandLogo size={28} />
           </div>
           <h1 className="text-lg font-bold tracking-tight text-text-primary flex items-center justify-center gap-2">
             BackupOps Control Plane
@@ -386,7 +385,7 @@ export const LoginView: React.FC = () => {
               onClick={handleFillDemo}
               className="text-[11px] font-mono text-brand-primary hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <Sparkles className="w-3 h-3" />
+              <User className="w-3 h-3" />
               <span>Fill Admin (admin@gmail.com)</span>
             </button>
           </div>

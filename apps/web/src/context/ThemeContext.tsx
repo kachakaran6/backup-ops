@@ -1,14 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type ThemeMode = 'dark' | 'light' | 'system';
-type ActualTheme = 'dark' | 'light';
+export type ThemeMode = 'dark' | 'light' | 'system';
+export type ActualTheme = 'dark' | 'light';
+export type PaletteMode = 'amber' | 'indigo' | 'emerald' | 'violet' | 'neon';
 
 interface ThemeContextType {
   theme: ThemeMode;
   actualTheme: ActualTheme;
   resolvedTheme: ActualTheme;
+  palette: PaletteMode;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
+  setPalette: (palette: PaletteMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -17,6 +20,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('backupops_theme') as ThemeMode;
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'dark';
+  });
+
+  const [palette, setPaletteState] = useState<PaletteMode>(() => {
+    const saved = localStorage.getItem('backupops_palette') as PaletteMode;
+    return ['amber', 'indigo', 'emerald', 'violet', 'neon'].includes(saved) ? saved : 'amber';
   });
 
   const [actualTheme, setActualTheme] = useState<ActualTheme>('dark');
@@ -50,6 +58,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [theme]);
 
+  // Apply palette attribute to root
+  useEffect(() => {
+    document.documentElement.setAttribute('data-palette', palette);
+    localStorage.setItem('backupops_palette', palette);
+  }, [palette]);
+
   const setTheme = (newTheme: ThemeMode) => {
     setThemeState(newTheme);
   };
@@ -58,8 +72,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const setPalette = (newPalette: PaletteMode) => {
+    setPaletteState(newPalette);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, actualTheme, resolvedTheme: actualTheme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        actualTheme,
+        resolvedTheme: actualTheme,
+        palette,
+        setTheme,
+        toggleTheme,
+        setPalette,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
@@ -72,3 +100,4 @@ export const useTheme = (): ThemeContextType => {
   }
   return context;
 };
+

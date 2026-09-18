@@ -188,7 +188,7 @@ export const VaultView: React.FC = () => {
                       <p className="text-[10px] text-text-muted font-mono truncate">ID: {cred.id.slice(0, 16)}...</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border shrink-0">
+                  <span className="text-[11px] font-mono text-text-muted shrink-0">
                     AES-256-GCM
                   </span>
                 </div>

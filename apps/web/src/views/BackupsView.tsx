@@ -131,14 +131,9 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
       {/* Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Backup History & Recovery Lineages
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {backups.length} stored artifacts
-            </span>
-          </div>
+          <h1 className="text-base font-semibold text-text-primary tracking-tight">
+            Backup History &amp; Lineages
+          </h1>
           <p className="text-xs text-text-muted mt-0.5">
             Deterministic recovery lineages with Base snapshot anchors, incremental delta blocks, and Point-In-Time Recovery (PITR) WAL segments.
           </p>
@@ -328,13 +323,7 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
                         <tr key={backup.id} className="hover:bg-surface-hover transition-colors font-mono">
                           <td className="whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                  isBase
-                                    ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30'
-                                    : 'bg-surface-secondary text-text-secondary border border-border'
-                                }`}
-                              >
+                              <span className="text-xs font-mono font-semibold uppercase text-text-primary">
                                 {backup.type}
                               </span>
                               <span className="text-text-muted text-[11px]">#{backup.sequence || 1}</span>
@@ -363,14 +352,14 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
                           </td>
                           <td className="whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${
+                              className={`inline-flex items-center gap-1 text-xs font-mono ${
                                 backup.verificationState === 'checksum_verified'
-                                  ? 'bg-success/10 text-success border-success/30'
-                                  : 'bg-warning/10 text-warning border-warning/30'
+                                  ? 'text-success'
+                                  : 'text-warning'
                               }`}
                             >
                               <CheckCircle2 className="w-3 h-3" />
-                              {backup.verificationState}
+                              {backup.verificationState === 'checksum_verified' ? 'Verified' : 'Pending'}
                             </span>
                           </td>
                           <td className="whitespace-nowrap text-text-muted text-xs">

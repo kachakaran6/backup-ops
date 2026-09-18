@@ -18,8 +18,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Shield,
 } from 'lucide-react';
+import { BrandLogo } from '../common/BrandLogo';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -39,7 +39,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   isCollapsed = false,
   onToggleCollapse,
-  counts,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,37 +65,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'INFRASTRUCTURE',
       items: [
         { path: '/infrastructure/coolify', label: 'Coolify', icon: Cloud },
-        { path: '/infrastructure/servers', label: 'Servers', icon: Server, badge: counts?.servers },
+        { path: '/infrastructure/servers', label: 'Servers', icon: Server },
         { path: '/infrastructure/docker', label: 'Docker & Volumes', icon: Container },
       ],
     },
     {
       title: 'DATA & STORAGE',
       items: [
-        { path: '/databases', label: 'Databases', icon: Database, badge: counts?.databases },
+        { path: '/databases', label: 'Databases', icon: Database },
         { path: '/storage', label: 'Storage', icon: HardDrive },
       ],
     },
     {
       title: 'PROTECTION',
       items: [
-        { path: '/backups', label: 'Backups & Chains', icon: ShieldCheck, badge: counts?.backups },
+        { path: '/backups', label: 'Backups & Chains', icon: ShieldCheck },
         { path: '/restore', label: 'Restore Center', icon: RotateCcw },
       ],
     },
     {
       title: 'OPERATIONS',
       items: [
-        {
-          path: '/operations',
-          label: 'Jobs & Tasks',
-          icon: Activity,
-          badge: counts?.runningJobs && counts.runningJobs > 0 ? `${counts.runningJobs} running` : undefined,
-          badgeColor:
-            counts?.runningJobs && counts.runningJobs > 0
-              ? 'bg-warning/15 text-warning border border-warning/30 font-semibold'
-              : undefined,
-        },
+        { path: '/operations', label: 'Jobs & Tasks', icon: Activity },
       ],
     },
     {
@@ -130,23 +120,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => onClose && onClose()}
           className="flex items-center gap-2.5 min-w-0 group"
         >
-          <div className="w-8 h-8 rounded-lg bg-brand/15 border border-brand/30 flex items-center justify-center text-brand shrink-0 group-hover:bg-brand/25 transition-colors">
-            <Shield className="w-4 h-4 fill-brand/20" />
+          <div className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/25 flex items-center justify-center text-brand shrink-0 group-hover:bg-brand/20 transition-colors">
+            <BrandLogo size={18} className="text-brand" />
           </div>
 
           {!isCollapsed && (
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold tracking-tight text-sidebar-text font-mono">
-                  BackupOps
-                </span>
-                <span className="text-[9px] font-mono font-medium px-1 py-0.2 rounded bg-brand/10 text-brand border border-brand/25">
-                  v1.0
-                </span>
-              </div>
-              <p className="text-[10px] text-sidebar-muted tracking-wide truncate">
-                CONTROL PLANE
-              </p>
+              <span className="text-sm font-bold tracking-tight text-sidebar-text font-mono">
+                BackupOps
+              </span>
             </div>
           )}
         </Link>
@@ -215,19 +197,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       />
                       {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </div>
-
-                    {!isCollapsed && item.badge !== undefined && (
-                      <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                          item.badgeColor ||
-                          (isActive
-                            ? 'bg-brand/20 text-brand'
-                            : 'bg-sidebar-surface text-sidebar-muted')
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
                   </button>
                 );
               })}

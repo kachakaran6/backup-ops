@@ -119,6 +119,123 @@
   --sidebar-active-text: #D97E42;
 }
 
+/* ==========================================================================
+   5 COLOR THEME PALETTES (Exact HEX from reference images)
+   ========================================================================== */
+
+/* 1. Warm Amber (Default Signature) */
+[data-palette="amber"] {
+  --brand-primary: #F29F67;
+  --brand-primary-foreground: #161622;
+  --brand-primary-hover: #FFAE7A;
+  --brand-primary-muted: rgba(242, 159, 103, 0.12);
+  --brand-primary-border: rgba(242, 159, 103, 0.3);
+  --sidebar-active-bg: rgba(242, 159, 103, 0.14);
+  --sidebar-active-text: #F29F67;
+}
+.light[data-palette="amber"], [data-palette="amber"].light, [data-palette="amber"] .light {
+  --brand-primary: #E88E52;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #D97E42;
+  --brand-primary-muted: rgba(232, 142, 82, 0.12);
+  --brand-primary-border: rgba(232, 142, 82, 0.3);
+  --sidebar-active-bg: rgba(232, 142, 82, 0.14);
+  --sidebar-active-text: #D97E42;
+}
+
+/* 2. Royal Indigo & Soft Sky (Image 1: 4B49AC, 98BDFF | 7DA0FA, 7978E9, F3797E) */
+[data-palette="indigo"] {
+  --brand-primary: #7978E9;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #98BDFF;
+  --brand-primary-muted: rgba(121, 120, 233, 0.15);
+  --brand-primary-border: rgba(121, 120, 233, 0.35);
+  --info: #7DA0FA;
+  --error: #F3797E;
+  --sidebar-active-bg: rgba(75, 73, 172, 0.22);
+  --sidebar-active-text: #98BDFF;
+}
+.light[data-palette="indigo"], [data-palette="indigo"].light, [data-palette="indigo"] .light {
+  --brand-primary: #4B49AC;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #3B398C;
+  --brand-primary-muted: rgba(75, 73, 172, 0.12);
+  --brand-primary-border: rgba(75, 73, 172, 0.3);
+  --info: #4B49AC;
+  --error: #E05359;
+  --sidebar-active-bg: rgba(75, 73, 172, 0.12);
+  --sidebar-active-text: #4B49AC;
+}
+
+/* 3. Cyber Emerald & Midnight (Image 2: 38CE3C, 181824 | FF4D6B, FFDE73, 8E32E9) */
+[data-palette="emerald"] {
+  --brand-primary: #38CE3C;
+  --brand-primary-foreground: #101018;
+  --brand-primary-hover: #52F856;
+  --brand-primary-muted: rgba(56, 206, 60, 0.14);
+  --brand-primary-border: rgba(56, 206, 60, 0.35);
+  --success: #38CE3C;
+  --error: #FF4D6B;
+  --warning: #FFDE73;
+  --info: #8E32E9;
+  --sidebar-active-bg: rgba(56, 206, 60, 0.16);
+  --sidebar-active-text: #38CE3C;
+}
+.light[data-palette="emerald"], [data-palette="emerald"].light, [data-palette="emerald"] .light {
+  --brand-primary: #23A827;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #1D8F21;
+  --brand-primary-muted: rgba(35, 168, 39, 0.12);
+  --brand-primary-border: rgba(35, 168, 39, 0.3);
+  --sidebar-active-bg: rgba(35, 168, 39, 0.12);
+  --sidebar-active-text: #23A827;
+}
+
+/* 4. Electric Violet & Azure (Image 3: 6F42C1, 007BFF | 00CCCC, 0DCAF0, 17A2B8) */
+[data-palette="violet"] {
+  --brand-primary: #8A5CF6;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #A78BFA;
+  --brand-primary-muted: rgba(111, 66, 193, 0.18);
+  --brand-primary-border: rgba(111, 66, 193, 0.35);
+  --info: #007BFF;
+  --success: #00CCCC;
+  --sidebar-active-bg: rgba(111, 66, 193, 0.22);
+  --sidebar-active-text: #0DCAF0;
+}
+.light[data-palette="violet"], [data-palette="violet"].light, [data-palette="violet"] .light {
+  --brand-primary: #6F42C1;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #5B32A3;
+  --brand-primary-muted: rgba(111, 66, 193, 0.12);
+  --brand-primary-border: rgba(111, 66, 193, 0.3);
+  --sidebar-active-bg: rgba(111, 66, 193, 0.12);
+  --sidebar-active-text: #6F42C1;
+}
+
+/* 5. Neon Orchid & Mint (Image 4: A05AFF, 1BCFB4 | 4BCBEB, FE9496, 9E58FF) */
+[data-palette="neon"] {
+  --brand-primary: #A05AFF;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #B77CFF;
+  --brand-primary-muted: rgba(160, 90, 255, 0.18);
+  --brand-primary-border: rgba(160, 90, 255, 0.35);
+  --success: #1BCFB4;
+  --info: #4BCBEB;
+  --error: #FE9496;
+  --sidebar-active-bg: rgba(160, 90, 255, 0.2);
+  --sidebar-active-text: #1BCFB4;
+}
+.light[data-palette="neon"], [data-palette="neon"].light, [data-palette="neon"] .light {
+  --brand-primary: #8537E8;
+  --brand-primary-foreground: #FFFFFF;
+  --brand-primary-hover: #7125D1;
+  --brand-primary-muted: rgba(133, 55, 232, 0.12);
+  --brand-primary-border: rgba(133, 55, 232, 0.3);
+  --sidebar-active-bg: rgba(133, 55, 232, 0.12);
+  --sidebar-active-text: #8537E8;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
