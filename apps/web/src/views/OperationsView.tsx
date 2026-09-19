@@ -20,6 +20,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { FilterBar } from '../components/common/FilterBar';
 import { LogViewer } from '../components/common/LogViewer';
+import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 
 export const OperationsView: React.FC = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -48,9 +49,16 @@ export const OperationsView: React.FC = () => {
       } catch (err) {
         // silent background polling
       }
-    }, 4000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (selectedJob) {
+      const updated = jobs.find((j) => j.id === selectedJob.id);
+      if (updated) setSelectedJob(updated);
+    }
+  }, [jobs]);
 
   const activeCount = jobs.filter((j) => j.state === 'running' || j.state === 'planning' || j.state === 'verifying').length;
   const completedCount = jobs.filter((j) => j.state === 'completed').length;
@@ -89,6 +97,15 @@ export const OperationsView: React.FC = () => {
         return 'UNKNOWN';
     }
   };
+
+  if (loading && jobs.length === 0) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-150">
+        <MetricCardsSkeleton count={4} />
+        <TableSkeleton rows={5} columns={8} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -189,9 +206,24 @@ export const OperationsView: React.FC = () => {
                     className="cursor-pointer hover:bg-surface-hover transition-colors font-mono"
                   >
                     <td>
-                      <span className="uppercase text-xs font-mono font-semibold text-text-primary">
-                        {job.operationType}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="uppercase text-xs font-mono font-semibold text-text-primary">
+                          {job.operationType}
+                        </span>
+                        {(job.options?.volumeName || job.options?.sourceVolume) && (
+                          <span
+                            className="text-[10px] text-brand-primary font-mono truncate max-w-[150px]"
+                            title={(job.options?.volumeName || job.options?.sourceVolume) as string}
+                          >
+                            vol: {job.options?.volumeName || job.options?.sourceVolume}
+                          </span>
+                        )}
+                        {job.options?.sourceServer && job.options?.targetServer && (
+                          <span className="text-[10px] text-text-muted font-sans truncate max-w-[150px]">
+                            {job.options.sourceServer} → {job.options.targetServer}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="text-[11px] text-text-muted">
                       {job.id.slice(0, 12)}...

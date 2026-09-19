@@ -610,21 +610,33 @@ export async function removeCredential(id: string): Promise<void> {
   } catch {}
 }
 
+export async function fetchJob(id: string): Promise<Job | null> {
+  try {
+    const res = await authFetch(`${API_BASE}/jobs/${id}?organizationId=default`);
+    if (res.ok) return await res.json();
+  } catch (err) {
+    console.error(`Failed to fetch job ${id}:`, err);
+  }
+  return null;
+}
+
 export async function createJob(data: {
   operationType: string;
   sourceResourceId: string;
   destinationResourceId?: string;
   options?: Record<string, any>;
-}): Promise<Job | null> {
-  try {
-    const res = await authFetch(`${API_BASE}/jobs?organizationId=default`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) return await res.json();
-  } catch {}
-  return null;
+}): Promise<Job> {
+  const res = await authFetch(`${API_BASE}/jobs?organizationId=default`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: `Request failed with status ${res.status}` }));
+    const errorMsg = Array.isArray(err.message) ? err.message.join(', ') : err.message || `Failed to create job (${res.status})`;
+    throw new Error(errorMsg);
+  }
+  return await res.json();
 }
 
 export async function retryJob(id: string): Promise<void> {

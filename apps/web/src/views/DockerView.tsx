@@ -20,8 +20,10 @@ import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 import { Select } from '../components/common/Select';
+import { useNavigate } from 'react-router-dom';
 
 export const DockerView: React.FC = () => {
+  const navigate = useNavigate();
   const [servers, setServers] = useState<ServerType[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string>('');
   const [dockerData, setDockerData] = useState<any>(null);
@@ -146,18 +148,33 @@ export const DockerView: React.FC = () => {
 
   const handleReplicateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replicateModal.volume || !replicateModal.targetServerId) return;
+    if (!replicateModal.volume || !replicateModal.targetServerId) {
+      alert('Please select a volume and a destination server.');
+      return;
+    }
+    if (!selectedServerId) {
+      alert('Source server not identified. Please select a server first.');
+      return;
+    }
 
     setReplicateModal((prev) => ({ ...prev, submitting: true }));
     try {
+      const sourceServer = servers.find((s) => s.id === selectedServerId);
+      const targetServer = servers.find((s) => s.id === replicateModal.targetServerId);
+
       const job = await api.createJob({
         operationType: 'copy',
-        sourceResourceId: selectedServer?.id || '',
+        sourceResourceId: selectedServerId,
         destinationResourceId: replicateModal.targetServerId,
         options: {
+          volumeName: replicateModal.volume.name,
+          targetVolumeName: replicateModal.targetVolumeName.trim() || replicateModal.volume.name,
           sourceVolume: replicateModal.volume.name,
-          destinationVolume: replicateModal.targetVolumeName || replicateModal.volume.name,
+          destinationVolume: replicateModal.targetVolumeName.trim() || replicateModal.volume.name,
+          transferProtocol: replicateModal.protocol,
           protocol: replicateModal.protocol,
+          sourceServer: sourceServer?.name || 'source',
+          targetServer: targetServer?.name || 'target',
           verifyChecksum: replicateModal.verifyChecksum,
           dryRun: replicateModal.dryRun,
         },
@@ -166,7 +183,7 @@ export const DockerView: React.FC = () => {
       setReplicateModal((prev) => ({
         ...prev,
         submitting: false,
-        successMessage: `Replication job #${job?.id?.slice(0, 8) || 'COPY'} initiated successfully. Live stream progress is available in Operations.`,
+        successMessage: `Replication job #${job.id.slice(0, 8)} initiated successfully. Live stream progress is available in Operations.`,
       }));
     } catch (err: any) {
       alert('Failed to initiate volume replication: ' + err.message);
@@ -451,14 +468,19 @@ export const DockerView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
-                  <a
-                    href="/operations"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplicateModal((prev) => ({ ...prev, isOpen: false }));
+                      navigate('/operations');
+                    }}
                     className="op-btn-primary flex items-center gap-1.5 !text-xs !py-1.5 !px-3"
                   >
-                    <span>View Operations</span>
+                    <span>View in Operations</span>
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
+                  </button>
                   <button
+                    type="button"
                     onClick={() => setReplicateModal((prev) => ({ ...prev, isOpen: false }))}
                     className="op-btn-secondary !text-xs !py-1.5 !px-3"
                   >

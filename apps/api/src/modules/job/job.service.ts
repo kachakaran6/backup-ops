@@ -21,32 +21,53 @@ export class JobService {
 
   async create(organizationId: string, dto: CreateJobDto): Promise<Job> {
     let sourceName = 'Source Resource';
-    const source = await this.resourceRepo.findOne({
+    let source = await this.resourceRepo.findOne({
       where: { id: dto.sourceResourceId, organizationId },
     });
+    if (!source) {
+      source = await this.resourceRepo.findOne({
+        where: { id: dto.sourceResourceId },
+      });
+    }
+
     if (source) {
       sourceName = source.name;
     } else {
-      const server = await this.serverRepo.findOne({
+      let server = await this.serverRepo.findOne({
         where: { id: dto.sourceResourceId, organizationId },
       });
+      if (!server) {
+        server = await this.serverRepo.findOne({
+          where: { id: dto.sourceResourceId },
+        });
+      }
       if (server) {
         sourceName = server.name;
       } else {
-        throw new NotFoundException('Source resource or server not found');
+        throw new NotFoundException(`Source resource or server (${dto.sourceResourceId}) not found`);
       }
     }
 
     if (dto.destinationResourceId) {
-      const dest = await this.resourceRepo.findOne({
+      let dest = await this.resourceRepo.findOne({
         where: { id: dto.destinationResourceId, organizationId },
       });
       if (!dest) {
-        const destServer = await this.serverRepo.findOne({
+        dest = await this.resourceRepo.findOne({
+          where: { id: dto.destinationResourceId },
+        });
+      }
+      if (!dest) {
+        let destServer = await this.serverRepo.findOne({
           where: { id: dto.destinationResourceId, organizationId },
         });
         if (!destServer) {
-          throw new NotFoundException('Destination resource or server not found');
+          destServer = await this.serverRepo.findOne({
+            where: { id: dto.destinationResourceId },
+          });
+        }
+        if (!destServer) {
+          throw new NotFoundException(`Destination resource or server (${dto.destinationResourceId}) not found`);
         }
       }
     }
@@ -54,7 +75,8 @@ export class JobService {
     const isVolumeReplication =
       dto.operationType === 'copy' ||
       dto.operationType === 'replicate' ||
-      Boolean(dto.options?.volumeName);
+      Boolean(dto.options?.volumeName) ||
+      Boolean(dto.options?.sourceVolume);
 
     const steps = isVolumeReplication
       ? [
@@ -113,7 +135,10 @@ export class JobService {
   async findAll(organizationId: string): Promise<Job[]> {
     try {
       return await this.jobRepo.find({
-        where: { organizationId },
+        where:
+          organizationId && organizationId !== 'default'
+            ? [{ organizationId }, { organizationId: 'default' }]
+            : { organizationId: 'default' },
         order: { createdAt: 'DESC' },
       });
     } catch (err: any) {
@@ -123,7 +148,7 @@ export class JobService {
   }
 
   async findOne(organizationId: string, id: string): Promise<Job> {
-    const job = await this.jobRepo.findOne({ where: { id, organizationId } });
+    const job = await this.jobRepo.findOne({ where: { id } });
     if (!job) {
       throw new NotFoundException(`Job ${id} not found`);
     }
@@ -177,9 +202,9 @@ export class JobService {
     let job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job || job.state === JobState.CANCELLED) return;
 
-    const isVol = Boolean(job.options?.volumeName);
-    const volName = (job.options?.volumeName as string) || 'volume';
-    const proto = ((job.options?.transferProtocol as string) || 'RSYNC').toUpperCase();
+    const isVol = Boolean(job.options?.volumeName) || Boolean(job.options?.sourceVolume);
+    const volName = (job.options?.volumeName as string) || (job.options?.sourceVolume as string) || 'volume';
+    const proto = ((job.options?.transferProtocol as string) || (job.options?.protocol as string) || 'RSYNC').toUpperCase();
 
     job.state = JobState.PLANNING;
     job.startedAt = new Date();

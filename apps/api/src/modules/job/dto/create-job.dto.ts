@@ -13,8 +13,8 @@ export class CreateJobDto {
   sourceResourceId: string;
 
   @ApiProperty({ example: 'uuid-of-destination-resource', required: false })
-  @IsUUID()
   @IsOptional()
+  @IsUUID()
   destinationResourceId?: string;
 
   @ApiProperty({ example: 'uuid-of-policy', required: false })
