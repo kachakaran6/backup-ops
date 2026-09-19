@@ -38,6 +38,7 @@ export const DockerView: React.FC = () => {
     isOpen: boolean;
     volume: any | null;
     targetServerId: string;
+    targetVolumeMode: 'new' | 'existing';
     targetVolumeName: string;
     protocol: string;
     verifyChecksum: boolean;
@@ -48,6 +49,7 @@ export const DockerView: React.FC = () => {
     isOpen: false,
     volume: null,
     targetServerId: '',
+    targetVolumeMode: 'new',
     targetVolumeName: '',
     protocol: 'rsync',
     verifyChecksum: true,
@@ -55,6 +57,9 @@ export const DockerView: React.FC = () => {
     submitting: false,
     successMessage: null,
   });
+
+  const [targetServerVolumes, setTargetServerVolumes] = useState<any[]>([]);
+  const [loadingTargetVolumes, setLoadingTargetVolumes] = useState<boolean>(false);
 
   const [coolifyGuideModal, setCoolifyGuideModal] = useState<{
     isOpen: boolean;
@@ -138,12 +143,34 @@ export const DockerView: React.FC = () => {
     await inspectDocker(serverId);
   };
 
+  useEffect(() => {
+    if (replicateModal.isOpen && replicateModal.targetServerId) {
+      setLoadingTargetVolumes(true);
+      api.fetchServerDocker(replicateModal.targetServerId)
+        .then((data) => {
+          const vols = data?.volumes || [];
+          setTargetServerVolumes(vols);
+        })
+        .catch((err) => {
+          console.error('Failed to load target server volumes:', err);
+          setTargetServerVolumes([]);
+        })
+        .finally(() => {
+          setLoadingTargetVolumes(false);
+        });
+    } else {
+      setTargetServerVolumes([]);
+    }
+  }, [replicateModal.isOpen, replicateModal.targetServerId]);
+
   const handleOpenReplicate = (vol: any) => {
     const otherServers = servers.filter((s) => s.id !== selectedServerId);
+    const defaultTargetId = otherServers[0]?.id || '';
     setReplicateModal({
       isOpen: true,
       volume: vol,
-      targetServerId: otherServers[0]?.id || '',
+      targetServerId: defaultTargetId,
+      targetVolumeMode: 'new',
       targetVolumeName: vol.name,
       protocol: 'rsync',
       verifyChecksum: true,
@@ -226,6 +253,7 @@ export const DockerView: React.FC = () => {
   };
 
   const selectedServer = servers.find((s) => s.id === selectedServerId);
+  const targetServer = servers.find((s) => s.id === replicateModal.targetServerId);
 
   if (loading && servers.length === 0) {
     return (
@@ -615,18 +643,145 @@ export const DockerView: React.FC = () => {
                   />
                 </div>
 
-                {/* Target Volume Name */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-text-secondary">Destination Volume Name</label>
-                  <input
-                    type="text"
-                    value={replicateModal.targetVolumeName}
-                    onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetVolumeName: e.target.value }))}
-                    className="op-input w-full font-mono"
-                    placeholder="Same as source volume name"
-                    required
-                  />
-                  <span className="text-[10px] text-text-muted">Will be created or updated on the destination host.</span>
+                {/* Target Volume Destination (Create New vs Use Existing) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-text-secondary">Destination Volume Strategy</label>
+                    <span className="text-[10px] text-text-muted">
+                      {replicateModal.targetVolumeMode === 'new' ? 'Create new volume on target' : 'Sync into existing volume'}
+                    </span>
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplicateModal((prev) => ({
+                          ...prev,
+                          targetVolumeMode: 'new',
+                          targetVolumeName: prev.volume?.name || '',
+                        }));
+                      }}
+                      className={`p-2.5 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        replicateModal.targetVolumeMode === 'new'
+                          ? 'bg-brand/10 border-brand text-text-primary ring-1 ring-brand'
+                          : 'bg-surface border-border text-text-muted hover:border-border-strong hover:bg-surface-hover'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-text-primary">Create New Volume</div>
+                        <div className="text-[10px] text-text-muted leading-tight">Provision fresh volume on target host</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstExisting = targetServerVolumes[0]?.name || replicateModal.volume?.name || '';
+                        setReplicateModal((prev) => ({
+                          ...prev,
+                          targetVolumeMode: 'existing',
+                          targetVolumeName: firstExisting,
+                        }));
+                      }}
+                      className={`p-2.5 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        replicateModal.targetVolumeMode === 'existing'
+                          ? 'bg-brand/10 border-brand text-text-primary ring-1 ring-brand'
+                          : 'bg-surface border-border text-text-muted hover:border-border-strong hover:bg-surface-hover'
+                      }`}
+                    >
+                      <FolderArchive className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-text-primary">Use Existing Volume</div>
+                        <div className="text-[10px] text-text-muted leading-tight">
+                          {loadingTargetVolumes
+                            ? 'Scanning host...'
+                            : `${targetServerVolumes.length} existing on ${targetServer?.name || 'host'}`}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Mode input */}
+                  {replicateModal.targetVolumeMode === 'new' ? (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-text-secondary">New Volume Name</label>
+                      <input
+                        type="text"
+                        value={replicateModal.targetVolumeName}
+                        onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetVolumeName: e.target.value }))}
+                        className="op-input w-full font-mono text-xs"
+                        placeholder="Volume name on destination"
+                        required
+                      />
+                      <span className="text-[10px] text-text-muted">
+                        A new Docker volume with this name will be created in Docker on {targetServer?.name || 'destination'}.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-text-secondary">
+                        Select Existing Volume on {targetServer?.name || 'Destination'}
+                      </label>
+                      {loadingTargetVolumes ? (
+                        <div className="p-2.5 rounded bg-surface border border-border text-xs text-text-muted flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand" />
+                          <span>Scanning existing Docker volumes on {targetServer?.name || 'target server'}...</span>
+                        </div>
+                      ) : targetServerVolumes.length > 0 ? (
+                        <Select
+                          value={replicateModal.targetVolumeName}
+                          onValueChange={(val) => setReplicateModal((prev) => ({ ...prev, targetVolumeName: val }))}
+                          placeholder="Select existing volume..."
+                          options={targetServerVolumes.map((v) => ({
+                            value: v.name,
+                            label: v.name,
+                            sublabel: `${formatBytes(v.sizeBytes)} • ${v.project || 'docker'}`,
+                            icon: FolderArchive,
+                          }))}
+                        />
+                      ) : (
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={replicateModal.targetVolumeName}
+                            onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetVolumeName: e.target.value }))}
+                            className="op-input w-full font-mono text-xs"
+                            placeholder="Enter existing volume name..."
+                            required
+                          />
+                          <span className="text-[10px] text-amber-500">
+                            No volumes were cached on {targetServer?.name || 'destination'}; enter existing name manually.
+                          </span>
+                        </div>
+                      )}
+                      <span className="text-[10px] text-text-muted">
+                        Data will be synchronized into this volume (overwrites matching files, keeps new files).
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Clear Where it will be stored box */}
+                <div className="p-3 rounded-lg bg-surface-secondary/70 border border-border space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                      <Server className="w-3.5 h-3.5 text-brand" />
+                      Destination Storage Path on {targetServer?.name || 'Target Host'}
+                    </span>
+                    <span className="text-brand font-mono text-[10px]">Host Filesystem</span>
+                  </div>
+                  <div className="font-mono text-xs text-text-primary bg-background/80 px-2.5 py-1.5 rounded border border-border flex items-center gap-2 break-all">
+                    <FolderArchive className="w-3.5 h-3.5 text-brand shrink-0" />
+                    <span>
+                      /var/lib/docker/volumes/<strong className="text-brand font-bold">{replicateModal.targetVolumeName.trim() || replicateModal.volume?.name}</strong>/_data
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-text-muted leading-relaxed">
+                    All data is replicated into this exact host path on <strong>{targetServer?.name || 'destination'}</strong> ({targetServer?.host}). Any Coolify app or container on this host can mount and access this volume directly.
+                  </p>
                 </div>
 
                 {/* Protocol */}
