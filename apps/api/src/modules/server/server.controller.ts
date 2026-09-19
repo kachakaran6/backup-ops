@@ -72,6 +72,17 @@ export class ServerController {
     return this.serverService.getServerDocker(organizationId, id);
   }
 
+  @Post(':id/volumes')
+  async addServerVolume(
+    @Param('id') id: string,
+    @Body() body: { name: string; driver?: string; mountpoint?: string; project?: string },
+    @Query('organizationId') orgIdQuery?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const organizationId = user?.organizationId || orgIdQuery || 'default';
+    return this.serverService.addServerVolume(organizationId, id, body);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

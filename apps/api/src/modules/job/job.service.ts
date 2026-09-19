@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Job, JobState } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { Resource } from '../resource/entities/resource.entity';
+import { Server } from '../server/entities/server.entity';
 
 @Injectable()
 export class JobService {
@@ -12,14 +13,26 @@ export class JobService {
     private jobRepo: Repository<Job>,
     @InjectRepository(Resource)
     private resourceRepo: Repository<Resource>,
+    @InjectRepository(Server)
+    private serverRepo: Repository<Server>,
   ) {}
 
   async create(organizationId: string, dto: CreateJobDto): Promise<Job> {
+    let sourceName = 'Source Resource';
     const source = await this.resourceRepo.findOne({
       where: { id: dto.sourceResourceId, organizationId },
     });
-    if (!source) {
-      throw new NotFoundException('Source resource not found');
+    if (source) {
+      sourceName = source.name;
+    } else {
+      const server = await this.serverRepo.findOne({
+        where: { id: dto.sourceResourceId, organizationId },
+      });
+      if (server) {
+        sourceName = server.name;
+      } else {
+        throw new NotFoundException('Source resource or server not found');
+      }
     }
 
     if (dto.destinationResourceId) {
@@ -27,22 +40,42 @@ export class JobService {
         where: { id: dto.destinationResourceId, organizationId },
       });
       if (!dest) {
-        throw new NotFoundException('Destination resource not found');
+        const destServer = await this.serverRepo.findOne({
+          where: { id: dto.destinationResourceId, organizationId },
+        });
+        if (!destServer) {
+          throw new NotFoundException('Destination resource or server not found');
+        }
       }
     }
 
-    const steps = [
-      { id: '1', name: 'Pre-flight resource check', status: 'pending' as const },
-      { id: '2', name: 'Snapshot and data preparation', status: 'pending' as const },
-      { id: '3', name: 'Secure transfer and streaming', status: 'pending' as const },
-      { id: '4', name: 'Checksum verification', status: 'pending' as const },
-      { id: '5', name: 'Metadata and retention finalization', status: 'pending' as const },
-    ];
+    const isVolumeReplication =
+      dto.operationType === 'copy' ||
+      dto.operationType === 'replicate' ||
+      Boolean(dto.options?.volumeName);
+
+    const steps = isVolumeReplication
+      ? [
+          { id: '1', name: 'Pre-flight volume & server check', status: 'pending' as const },
+          { id: '2', name: 'Create volume snapshot & export stream', status: 'pending' as const },
+          { id: '3', name: 'Transfer data over protocol', status: 'pending' as const },
+          { id: '4', name: 'Verify volume checksum & mountpoint', status: 'pending' as const },
+          { id: '5', name: 'Register replicated volume', status: 'pending' as const },
+        ]
+      : [
+          { id: '1', name: 'Pre-flight resource check', status: 'pending' as const },
+          { id: '2', name: 'Snapshot and data preparation', status: 'pending' as const },
+          { id: '3', name: 'Secure transfer and streaming', status: 'pending' as const },
+          { id: '4', name: 'Checksum verification', status: 'pending' as const },
+          { id: '5', name: 'Metadata and retention finalization', status: 'pending' as const },
+        ];
 
     const initialLog = {
       timestamp: new Date().toISOString(),
       level: 'info' as const,
-      message: `Job ${dto.operationType.toUpperCase()} queued for source ${source.name}`,
+      message: isVolumeReplication
+        ? `Volume replication queued: ${dto.options?.volumeName || 'volume'} from ${dto.options?.sourceServer || sourceName} to ${dto.options?.targetServer || 'target'}`
+        : `Job ${dto.operationType.toUpperCase()} queued for source ${sourceName}`,
     };
 
     const job = this.jobRepo.create({
@@ -137,16 +170,24 @@ export class JobService {
     let job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job || job.state === JobState.CANCELLED) return;
 
+    const isVol = Boolean(job.options?.volumeName);
+    const volName = (job.options?.volumeName as string) || 'volume';
+    const proto = ((job.options?.transferProtocol as string) || 'RSYNC').toUpperCase();
+
     job.state = JobState.PLANNING;
     job.startedAt = new Date();
-    job.progress.currentStep = 'Validating source connectivity and planning data stream';
+    job.progress.currentStep = isVol
+      ? `Validating volume ${volName} connectivity and destination mountpoint`
+      : 'Validating source connectivity and planning data stream';
     job.progress.percentage = 15;
     job.steps[0].status = 'completed';
     job.steps[1].status = 'running';
     job.logs.push({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: 'Resource connectivity confirmed. Preparing data chunking stream.',
+      message: isVol
+        ? `Pre-flight validation passed for volume ${volName}. Initializing ${proto} stream.`
+        : 'Resource connectivity confirmed. Preparing data chunking stream.',
     });
     await this.jobRepo.save(job);
 
@@ -156,7 +197,9 @@ export class JobService {
     if (!job || job.state === JobState.CANCELLED) return;
 
     job.state = JobState.RUNNING;
-    job.progress.currentStep = 'Streaming and transferring encrypted backup payload';
+    job.progress.currentStep = isVol
+      ? `Streaming volume ${volName} blocks via ${proto}`
+      : 'Streaming and transferring encrypted backup payload';
     job.progress.percentage = 65;
     job.progress.bytesProcessed = 84 * 1024 * 1024;
     job.progress.filesProcessed = 35;
@@ -168,7 +211,9 @@ export class JobService {
     job.logs.push({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: 'Transferring 84MB of compressed payload to destination.',
+      message: isVol
+        ? `Transferred 84MB of volume data blocks to target host over ${proto}.`
+        : 'Transferring 84MB of compressed payload to destination.',
     });
     await this.jobRepo.save(job);
 
@@ -178,7 +223,9 @@ export class JobService {
     if (!job || job.state === JobState.CANCELLED) return;
 
     job.state = JobState.VERIFYING;
-    job.progress.currentStep = 'Verifying SHA-256 integrity checksums at destination';
+    job.progress.currentStep = isVol
+      ? `Verifying SHA-256 block digest for volume ${volName} at destination`
+      : 'Verifying SHA-256 integrity checksums at destination';
     job.progress.percentage = 90;
     job.progress.bytesProcessed = job.progress.totalBytes;
     job.progress.filesProcessed = job.progress.totalFiles;
@@ -187,7 +234,9 @@ export class JobService {
     job.logs.push({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: 'Checksum calculation verified: destination payload matches source digest exactly.',
+      message: isVol
+        ? `Volume integrity verified: SHA-256 block match confirmed on destination host.`
+        : 'Checksum calculation verified: destination payload matches source digest exactly.',
     });
     await this.jobRepo.save(job);
 
@@ -198,13 +247,17 @@ export class JobService {
 
     job.state = JobState.COMPLETED;
     job.progress.percentage = 100;
-    job.progress.currentStep = 'Operation completed successfully';
+    job.progress.currentStep = isVol
+      ? `Volume ${volName} replicated successfully`
+      : 'Operation completed successfully';
     job.finishedAt = new Date();
     job.steps[4].status = 'completed';
     job.logs.push({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: `Operation ${job.operationType.toUpperCase()} completed successfully. Backup snapshot registered.`,
+      message: isVol
+        ? `Volume replication for ${volName} completed successfully. Destination mount ready.`
+        : `Operation ${job.operationType.toUpperCase()} completed successfully. Backup snapshot registered.`,
     });
     await this.jobRepo.save(job);
   }

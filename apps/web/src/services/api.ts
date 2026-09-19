@@ -263,6 +263,22 @@ export async function fetchServerDocker(serverId: string): Promise<any> {
   return { installed: false, running: false, containers: [], volumes: [] };
 }
 
+export async function addServerVolume(
+  serverId: string,
+  data: { name: string; driver?: string; mountpoint?: string; project?: string },
+): Promise<any> {
+  const res = await authFetch(`${API_BASE}/servers/${serverId}/volumes?organizationId=default`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Failed to add volume' }));
+    throw new Error(err.message || 'Failed to add volume');
+  }
+  return await res.json();
+}
+
 export async function removeServer(id: string): Promise<void> {
   try {
     await authFetch(`${API_BASE}/servers/${id}?organizationId=default`, { method: 'DELETE' });

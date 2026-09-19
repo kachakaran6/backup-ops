@@ -54,6 +54,12 @@ export class Job {
     verifyChecksum?: boolean;
     dryRun?: boolean;
     deleteAfterMove?: boolean;
+    volumeName?: string;
+    targetVolumeName?: string;
+    transferProtocol?: string;
+    sourceServer?: string;
+    targetServer?: string;
+    [key: string]: any;
   };
 
   @Column({ type: 'simple-json', default: '[]' })

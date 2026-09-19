@@ -11,6 +11,7 @@ import {
   X,
   ArrowRight,
   ShieldCheck,
+  Plus,
 } from 'lucide-react';
 import { Server as ServerType } from '../types';
 import * as api from '../services/api';
@@ -45,6 +46,22 @@ export const DockerView: React.FC = () => {
     dryRun: false,
     submitting: false,
     successMessage: null,
+  });
+
+  const [addVolumeModal, setAddVolumeModal] = useState<{
+    isOpen: boolean;
+    name: string;
+    project: string;
+    mountpoint: string;
+    driver: string;
+    submitting: boolean;
+  }>({
+    isOpen: false,
+    name: '',
+    project: 'testing-project',
+    mountpoint: '',
+    driver: 'local',
+    submitting: false,
   });
 
   useEffect(() => {
@@ -96,6 +113,33 @@ export const DockerView: React.FC = () => {
       submitting: false,
       successMessage: null,
     });
+  };
+
+  const handleAddVolumeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addVolumeModal.name.trim()) return;
+    setAddVolumeModal((prev) => ({ ...prev, submitting: true }));
+    try {
+      await api.addServerVolume(selectedServerId, {
+        name: addVolumeModal.name.trim(),
+        project: addVolumeModal.project.trim() || 'testing-project',
+        mountpoint: addVolumeModal.mountpoint.trim() || `/var/lib/docker/volumes/${addVolumeModal.name.trim()}/_data`,
+        driver: addVolumeModal.driver,
+      });
+      setAddVolumeModal({
+        isOpen: false,
+        name: '',
+        project: 'testing-project',
+        mountpoint: '',
+        driver: 'local',
+        submitting: false,
+      });
+      await inspectDocker(selectedServerId);
+    } catch (err: any) {
+      console.error('Failed to add volume:', err);
+    } finally {
+      setAddVolumeModal((prev) => ({ ...prev, submitting: false }));
+    }
   };
 
   const handleReplicateSubmit = async (e: React.FormEvent) => {
@@ -309,11 +353,20 @@ export const DockerView: React.FC = () => {
 
               {/* Volumes Table */}
               <div className="op-card overflow-hidden">
-                <div className="p-3 border-b border-border flex items-center gap-2">
-                  <FolderArchive className="w-4 h-4 text-text-muted" />
-                  <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">
-                    Docker Named Volumes ({dockerData.volumes?.length || 0})
-                  </h3>
+                <div className="p-3 border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FolderArchive className="w-4 h-4 text-text-muted" />
+                    <h3 className="font-semibold text-xs text-text-primary uppercase tracking-wider">
+                      Docker Named Volumes ({dockerData.volumes?.length || 0})
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setAddVolumeModal((prev) => ({ ...prev, isOpen: true }))}
+                    className="op-btn-secondary !text-xs !py-1 !px-2 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-brand-primary" />
+                    <span>Add Volume</span>
+                  </button>
                 </div>
                 {dockerData.volumes && dockerData.volumes.length > 0 ? (
                   <div className="overflow-x-auto">
@@ -321,6 +374,7 @@ export const DockerView: React.FC = () => {
                       <thead>
                         <tr>
                           <th>Volume Name</th>
+                          <th>Project / Scope</th>
                           <th>Driver</th>
                           <th>Mountpoint</th>
                           <th className="text-right">Actions</th>
@@ -330,6 +384,11 @@ export const DockerView: React.FC = () => {
                         {dockerData.volumes.map((v: any, idx: number) => (
                           <tr key={idx} className="hover:bg-surface-hover transition-colors">
                             <td className="text-text-primary font-medium">{v.name}</td>
+                            <td className="font-sans">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-elevated text-text-secondary border border-border">
+                                {v.project || 'system'}
+                              </span>
+                            </td>
                             <td className="text-text-muted">{v.driver || 'local'}</td>
                             <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>
                             <td className="text-right font-sans">
@@ -533,6 +592,97 @@ export const DockerView: React.FC = () => {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Volume Modal */}
+      {addVolumeModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-md w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <FolderArchive className="w-4 h-4 text-brand-primary" />
+                <h3 className="font-semibold text-sm text-text-primary">
+                  Add Testing Volume to Server
+                </h3>
+              </div>
+              <button
+                onClick={() => setAddVolumeModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-text-muted hover:text-text-primary p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddVolumeSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Volume Name <span className="text-error">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. test_project_volume"
+                  value={addVolumeModal.name}
+                  onChange={(e) => setAddVolumeModal((prev) => ({ ...prev, name: e.target.value }))}
+                  className="op-input w-full font-mono text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Project / Scope
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. testing-project"
+                  value={addVolumeModal.project}
+                  onChange={(e) => setAddVolumeModal((prev) => ({ ...prev, project: e.target.value }))}
+                  className="op-input w-full font-mono text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Mountpoint (Host or Container)
+                </label>
+                <input
+                  type="text"
+                  placeholder="/var/lib/docker/volumes/... or /data"
+                  value={addVolumeModal.mountpoint}
+                  onChange={(e) => setAddVolumeModal((prev) => ({ ...prev, mountpoint: e.target.value }))}
+                  className="op-input w-full font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setAddVolumeModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="op-btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addVolumeModal.submitting || !addVolumeModal.name.trim()}
+                  className="op-btn-primary flex items-center gap-1.5"
+                >
+                  {addVolumeModal.submitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Attach Volume</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

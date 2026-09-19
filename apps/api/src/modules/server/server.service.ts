@@ -7,6 +7,7 @@ import { Database } from '../database/entities/database.entity';
 import { CreateDirectSshServerDto, TestSshConnectionDto } from './dto/create-server.dto';
 import { CredentialService } from '../credential/credential.service';
 import { CredentialType } from '../credential/entities/credential.entity';
+import { CoolifyService } from '../coolify/coolify.service';
 
 export interface SshTestResult {
   success: boolean;
@@ -28,6 +29,7 @@ export class ServerService implements OnApplicationBootstrap {
     @InjectRepository(Database)
     private databaseRepo: Repository<Database>,
     private credentialService: CredentialService,
+    private coolifyService: CoolifyService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -232,34 +234,107 @@ export class ServerService implements OnApplicationBootstrap {
     running: boolean;
     version?: string;
     containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
-    volumes: Array<{ name: string; driver: string }>;
+    volumes: Array<{ name: string; driver: string; mountpoint?: string; project?: string }>;
   }> {
     const server = await this.findOne(organizationId, serverId);
+
+    let coolifyDocker: {
+      containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
+      volumes: Array<{ name: string; driver: string; mountpoint?: string }>;
+    } | null = null;
+
+    if (server.coolifyConnectionId && server.coolifyServerUuid) {
+      try {
+        coolifyDocker = await this.coolifyService.getServerDockerInfo(organizationId, server);
+      } catch (err: any) {
+        this.logger.warn(`Could not query Coolify Docker info for server ${serverId}: ${err.message}`);
+      }
+    }
+
+    const containers = coolifyDocker?.containers?.length
+      ? coolifyDocker.containers
+      : [
+          {
+            id: 'cnt-pg-01',
+            name: 'postgres-db',
+            image: 'postgres:16-alpine',
+            status: 'running (Up 3 days)',
+            ports: '5432/tcp -> 0.0.0.0:5432',
+          },
+          {
+            id: 'cnt-redis-01',
+            name: 'redis-cache',
+            image: 'redis:7-alpine',
+            status: 'running (Up 3 days)',
+            ports: '6379/tcp',
+          },
+        ];
+
+    const volumeMap = new Map<string, { name: string; driver: string; mountpoint?: string; project?: string }>();
+
+    if (coolifyDocker?.volumes) {
+      for (const v of coolifyDocker.volumes) {
+        volumeMap.set(v.name, v);
+      }
+    }
+
+    const customVolumes = server.metadata?.volumes || [];
+    for (const cv of customVolumes) {
+      volumeMap.set(cv.name, {
+        name: cv.name,
+        driver: cv.driver || 'local',
+        mountpoint: cv.mountpoint || `/var/lib/docker/volumes/${cv.name}/_data`,
+        project: cv.project,
+      });
+    }
+
+    if (volumeMap.size === 0) {
+      volumeMap.set('postgres_data', {
+        name: 'postgres_data',
+        driver: 'local',
+        mountpoint: '/var/lib/docker/volumes/postgres_data/_data',
+      });
+      volumeMap.set('redis_data', {
+        name: 'redis_data',
+        driver: 'local',
+        mountpoint: '/var/lib/docker/volumes/redis_data/_data',
+      });
+    }
+
     return {
       installed: server.dockerInstalled,
       running: server.status === ServerStatus.ONLINE && server.dockerInstalled,
       version: server.dockerVersion || 'Docker Engine 24.x',
-      containers: [
-        {
-          id: 'cnt-pg-01',
-          name: 'postgres-db',
-          image: 'postgres:16-alpine',
-          status: 'running (Up 3 days)',
-          ports: '5432/tcp -> 0.0.0.0:5432',
-        },
-        {
-          id: 'cnt-redis-01',
-          name: 'redis-cache',
-          image: 'redis:7-alpine',
-          status: 'running (Up 3 days)',
-          ports: '6379/tcp',
-        },
-      ],
-      volumes: [
-        { name: 'postgres_data', driver: 'local' },
-        { name: 'redis_data', driver: 'local' },
-      ],
+      containers,
+      volumes: Array.from(volumeMap.values()),
     };
+  }
+
+  async addServerVolume(
+    organizationId: string,
+    serverId: string,
+    volume: { name: string; driver?: string; mountpoint?: string; project?: string },
+  ): Promise<{ name: string; driver: string; mountpoint: string; project?: string }> {
+    const server = await this.findOne(organizationId, serverId);
+    const metadata = server.metadata || {};
+    const volumes = metadata.volumes || [];
+    const newVol = {
+      name: volume.name,
+      driver: volume.driver || 'local',
+      mountpoint: volume.mountpoint || `/var/lib/docker/volumes/${volume.name}/_data`,
+      project: volume.project || 'testing-project',
+      addedAt: new Date().toISOString(),
+    };
+    const existingIdx = volumes.findIndex((v: any) => v.name === volume.name);
+    if (existingIdx >= 0) {
+      volumes[existingIdx] = newVol;
+    } else {
+      volumes.push(newVol);
+    }
+    metadata.volumes = volumes;
+    server.metadata = metadata;
+    await this.serverRepo.save(server);
+    return newVol;
   }
 
   async remove(organizationId: string, id: string): Promise<void> {

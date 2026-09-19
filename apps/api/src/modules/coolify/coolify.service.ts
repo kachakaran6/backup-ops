@@ -406,4 +406,59 @@ export class CoolifyService {
     decrypted += decipher.final('utf8');
     return decrypted;
   }
+
+  async getServerDockerInfo(organizationId: string, server: Server): Promise<{
+    containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
+    volumes: Array<{ name: string; driver: string; mountpoint?: string }>;
+  } | null> {
+    if (!server.coolifyConnectionId || !server.coolifyServerUuid) {
+      return null;
+    }
+    const conn = await this.coolifyRepo
+      .createQueryBuilder('conn')
+      .addSelect(['conn.encryptedToken', 'conn.tokenIv', 'conn.tokenAuthTag'])
+      .where('conn.id = :id AND conn.organizationId = :organizationId', { id: server.coolifyConnectionId, organizationId })
+      .getOne();
+
+    if (!conn) return null;
+
+    const token = this.decryptToken(conn.encryptedToken, conn.tokenIv, conn.tokenAuthTag);
+    const resources = await this.coolifyProvider.listServerResources(conn.url, token, server.coolifyServerUuid);
+
+    const containers: Array<{ id: string; name: string; image: string; status: string; ports: string }> = [];
+    const volumes: Array<{ name: string; driver: string; mountpoint?: string }> = [];
+    const seenVolumes = new Set<string>();
+
+    for (const res of resources) {
+      containers.push({
+        id: res.uuid || String(res.id),
+        name: res.name || 'app',
+        image: res.type === 'application' ? (res.docker_registry_image_name || res.type) : res.type,
+        status: res.status ? `running (${res.status})` : 'running',
+        ports: res.ports || '-',
+      });
+
+      if (res.type === 'application' || (res.uuid && !res.type?.includes('database'))) {
+        try {
+          const storages = await this.coolifyProvider.getApplicationStorages(conn.url, token, res.uuid);
+          if (storages?.persistent_storages) {
+            for (const ps of storages.persistent_storages) {
+              if (!seenVolumes.has(ps.name)) {
+                seenVolumes.add(ps.name);
+                volumes.push({
+                  name: ps.name,
+                  driver: 'local',
+                  mountpoint: ps.mount_path || `/var/lib/docker/volumes/${ps.name}/_data`,
+                });
+              }
+            }
+          }
+        } catch (err: any) {
+          this.logger.warn(`Failed fetching storages for app ${res.uuid}: ${err.message}`);
+        }
+      }
+    }
+
+    return { containers, volumes };
+  }
 }

@@ -189,6 +189,13 @@ export class CoolifyProvider {
   }
 
   /**
+   * List storages for a specific application.
+   */
+  async getApplicationStorages(url: string, token: string, appUuid: string): Promise<any> {
+    return this.apiGet<any>(url, token, `/api/v1/applications/${appUuid}/storages`);
+  }
+
+  /**
    * Internal helper for Coolify API GET requests.
    * Never logs the token. Handles errors gracefully.
    */
