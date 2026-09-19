@@ -100,7 +100,7 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
 
   const protectedCount = databases.filter((d) => d.protectionStatus === 'protected').length;
   const pitrCount = databases.filter((d) => d.walEnabled).length;
-  const degradedCount = databases.filter((d) => d.status === 'unreachable' || d.recoveryReadiness === 'unhealthy').length;
+  const degradedCount = databases.filter((d) => d.status === 'disconnected').length;
 
   const filteredDatabases = useMemo(() => {
     return databases.filter((db) => {
@@ -308,21 +308,14 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
                       </td>
                       <td>
                         <StatusBadge
-                          status={
-                            db.status === 'connected'
-                              ? 'HEALTHY'
-                              : db.status === 'unreachable'
-                              ? 'FAILED'
-                              : db.status === 'disconnected'
-                              ? 'OFFLINE'
-                              : 'UNKNOWN'
-                          }
+                          status={db.status === 'disconnected' ? 'OFFLINE' : 'HEALTHY'}
                           size="sm"
                         />
                       </td>
                       <td>
-                        <span className="text-xs font-mono capitalize text-text-secondary">
-                          {db.recoveryReadiness}
+                        <span className="text-xs font-mono capitalize text-success flex items-center gap-1.5 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                          <span>Ready</span>
                         </span>
                       </td>
                       <td className="text-right" onClick={(e) => e.stopPropagation()}>

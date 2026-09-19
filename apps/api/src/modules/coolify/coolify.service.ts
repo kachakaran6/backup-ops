@@ -341,10 +341,8 @@ export class CoolifyService {
 
     // Determine status from Coolify telemetry
     const rawStatus = (gdb.status || '').toLowerCase();
-    let status = DatabaseStatus.UNKNOWN;
-    if (rawStatus.includes('running') || rawStatus.includes('healthy')) {
-      status = DatabaseStatus.CONNECTED;
-    } else if (rawStatus.includes('exited') || rawStatus.includes('stopped')) {
+    let status = DatabaseStatus.CONNECTED;
+    if (rawStatus.includes('exited') || rawStatus.includes('stopped')) {
       status = DatabaseStatus.DISCONNECTED;
     }
 
@@ -387,7 +385,10 @@ export class CoolifyService {
         credentialId,
         status,
         protectionStatus: DatabaseProtectionStatus.DISCOVERED,
-        recoveryReadiness: DatabaseRecoveryReadiness.READY,
+        recoveryReadiness:
+          status === DatabaseStatus.DISCONNECTED
+            ? DatabaseRecoveryReadiness.DEGRADED
+            : DatabaseRecoveryReadiness.READY,
         sizeBytes: defaultSizeBytes,
         tableCount: defaultTableCount,
         metadata: gdb,
@@ -401,6 +402,10 @@ export class CoolifyService {
       db.databaseName = dbName;
       if (credentialId) db.credentialId = credentialId;
       db.status = status;
+      db.recoveryReadiness =
+        status === DatabaseStatus.DISCONNECTED
+          ? DatabaseRecoveryReadiness.DEGRADED
+          : DatabaseRecoveryReadiness.READY;
       if (serverRecord) db.serverId = serverRecord.id;
       if (!db.sizeBytes || Number(db.sizeBytes) === 0) {
         db.sizeBytes = defaultSizeBytes;

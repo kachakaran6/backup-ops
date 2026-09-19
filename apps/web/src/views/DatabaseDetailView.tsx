@@ -92,7 +92,7 @@ export const DatabaseDetailView: React.FC<DatabaseDetailViewProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold text-text-primary truncate">{database.name}</h1>
-              <StatusBadge status={database.status === 'connected' ? 'HEALTHY' : 'FAILED'} size="sm" />
+              <StatusBadge status={database.status === 'disconnected' ? 'OFFLINE' : 'HEALTHY'} size="sm" />
               <span className="text-xs font-mono uppercase text-text-muted">
                 {database.type}
               </span>

@@ -13,6 +13,10 @@ import {
   ShieldCheck,
   Plus,
   Check,
+  ExternalLink,
+  Terminal,
+  Cloud,
+  BookOpen,
 } from 'lucide-react';
 import { Server as ServerType } from '../types';
 import * as api from '../services/api';
@@ -35,7 +39,7 @@ export const DockerView: React.FC = () => {
     volume: any | null;
     targetServerId: string;
     targetVolumeName: string;
-    protocol: 'rsync' | 'archive';
+    protocol: string;
     verifyChecksum: boolean;
     dryRun: boolean;
     submitting: boolean;
@@ -50,6 +54,20 @@ export const DockerView: React.FC = () => {
     dryRun: false,
     submitting: false,
     successMessage: null,
+  });
+
+  const [coolifyGuideModal, setCoolifyGuideModal] = useState<{
+    isOpen: boolean;
+    volume: any | null;
+    serverName: string;
+    serverIp: string;
+    copiedField: string | null;
+  }>({
+    isOpen: false,
+    volume: null,
+    serverName: '',
+    serverIp: '',
+    copiedField: null,
   });
 
   const [addVolumeModal, setAddVolumeModal] = useState<{
@@ -67,6 +85,14 @@ export const DockerView: React.FC = () => {
     driver: 'local',
     submitting: false,
   });
+
+  const handleCopy = (text: string, fieldId: string) => {
+    navigator.clipboard.writeText(text);
+    setCoolifyGuideModal((prev) => ({ ...prev, copiedField: fieldId }));
+    setTimeout(() => {
+      setCoolifyGuideModal((prev) => ({ ...prev, copiedField: null }));
+    }, 2000);
+  };
 
   const formatBytes = (bytes?: number) => {
     if (!bytes || bytes === 0) return '128.0 MB';
@@ -378,6 +404,24 @@ export const DockerView: React.FC = () => {
                 )}
               </div>
 
+              {/* Coolify Operational Guide Banner */}
+              <div className="op-card p-3 flex items-start gap-3 border-l-2 border-l-info/70 bg-surface-secondary/40">
+                <Cloud className="w-4 h-4 text-info shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-text-primary">
+                      Where are these volumes in Coolify?
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-info/10 text-info border border-info/20">
+                      Host Mount: /var/lib/docker/volumes/...
+                    </span>
+                  </div>
+                  <p className="text-text-muted leading-relaxed text-[11px]">
+                    Volumes replicated or created here exist directly in Docker Engine on this host. In Coolify, volumes only show inside an application once attached. To attach any volume in Coolify: open your <strong>Application / Service in Coolify</strong> &rarr; go to <strong>Storages tab</strong> &rarr; click <strong>+ Add Persistent Storage</strong> with the Volume Name. Click the <strong>Coolify Guide</strong> button on any volume below for exact copy-paste steps!
+                  </p>
+                </div>
+              </div>
+
               {/* Volumes Table */}
               <div className="op-card overflow-hidden">
                 <div className="p-3 border-b border-border flex items-center justify-between">
@@ -423,14 +467,32 @@ export const DockerView: React.FC = () => {
                             <td className="text-text-muted">{v.driver || 'local'}</td>
                             <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>
                             <td className="text-right font-sans">
-                              <button
-                                onClick={() => handleOpenReplicate(v)}
-                                className="op-btn-secondary !text-[11px] !py-1 !px-2 flex items-center gap-1.5 ml-auto cursor-pointer"
-                                title="Replicate volume to another server"
-                              >
-                                <Copy className="w-3 h-3 text-brand-primary" />
-                                <span>Replicate</span>
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() =>
+                                    setCoolifyGuideModal({
+                                      isOpen: true,
+                                      volume: v,
+                                      serverName: selectedServer?.name || 'target-server',
+                                      serverIp: selectedServer?.host || '',
+                                      copiedField: null,
+                                    })
+                                  }
+                                  className="op-btn-secondary !text-[11px] !py-1 !px-2 flex items-center gap-1 cursor-pointer text-text-secondary hover:text-text-primary"
+                                  title="How to see and mount this volume in Coolify"
+                                >
+                                  <ExternalLink className="w-3 h-3 text-info" />
+                                  <span>Coolify Guide</span>
+                                </button>
+                                <button
+                                  onClick={() => handleOpenReplicate(v)}
+                                  className="op-btn-secondary !text-[11px] !py-1 !px-2 flex items-center gap-1.5 cursor-pointer"
+                                  title="Replicate volume to another server"
+                                >
+                                  <Copy className="w-3 h-3 text-brand-primary" />
+                                  <span>Replicate</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -480,6 +542,29 @@ export const DockerView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetServer = servers.find((s) => s.id === replicateModal.targetServerId);
+                      const volName = replicateModal.targetVolumeName.trim() || replicateModal.volume?.name;
+                      setReplicateModal((prev) => ({ ...prev, isOpen: false }));
+                      setCoolifyGuideModal({
+                        isOpen: true,
+                        volume: {
+                          name: volName,
+                          mountpoint: `/var/lib/docker/volumes/${volName}/_data`,
+                          driver: 'local',
+                        },
+                        serverName: targetServer?.name || 'target-server',
+                        serverIp: targetServer?.host || '',
+                        copiedField: null,
+                      });
+                    }}
+                    className="op-btn-secondary flex items-center gap-1.5 !text-xs !py-1.5 !px-3"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-info" />
+                    <span>How to Mount in Coolify</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -744,6 +829,164 @@ export const DockerView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Coolify Mount & Inspection Guide Modal */}
+      {coolifyGuideModal.isOpen && coolifyGuideModal.volume && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-2xl w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded bg-info/10 border border-info/30 flex items-center justify-center text-info">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-text-primary">
+                    How to See & Mount this Volume in Coolify
+                  </h3>
+                  <p className="text-[11px] font-mono text-text-muted">
+                    Volume: <strong className="text-brand-primary">{coolifyGuideModal.volume.name}</strong> on host <strong className="text-text-primary">{coolifyGuideModal.serverName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCoolifyGuideModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-text-muted hover:text-text-primary p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Summary Alert */}
+            <div className="p-3.5 rounded-lg bg-info/10 border border-info/20 text-xs space-y-1">
+              <span className="font-semibold text-info block flex items-center gap-1.5">
+                <Info className="w-4 h-4" />
+                Why isn't this volume listed in Coolify's web UI yet?
+              </span>
+              <p className="text-text-secondary text-[11px] leading-relaxed">
+                Coolify tracks volumes on a <strong>per-application</strong> basis. When a volume is replicated or created in BackupOps, it is created directly on the host server's Docker daemon at <code className="text-brand-primary font-mono font-semibold">/var/lib/docker/volumes/{coolifyGuideModal.volume.name}/_data</code>. To attach it and see it in your Coolify apps, follow the 3 quick steps below:
+              </p>
+            </div>
+
+            {/* Guide Steps */}
+            <div className="space-y-3 pt-1">
+              <h4 className="text-xs font-semibold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-brand-primary" />
+                <span>Step-by-Step: Mount in Coolify Web Dashboard</span>
+              </h4>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="p-3 rounded-lg bg-surface-secondary border border-border space-y-1.5">
+                  <div className="flex items-center gap-2 font-medium text-text-primary">
+                    <span className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[10px] font-bold">1</span>
+                    <span>Open Coolify and select server <strong className="text-brand-primary font-mono">{coolifyGuideModal.serverName}</strong>.</span>
+                  </div>
+                  <p className="text-text-muted text-[11px] pl-7">
+                    Open your <strong>Project</strong>, and click on the target <strong>Application</strong> or <strong>Service</strong> where you want to attach this volume.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg bg-surface-secondary border border-border space-y-2">
+                  <div className="flex items-center gap-2 font-medium text-text-primary">
+                    <span className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[10px] font-bold">2</span>
+                    <span>Go to the <strong>Storages</strong> tab &rarr; click <strong>+ Add Persistent Storage</strong>.</span>
+                  </div>
+                  <div className="pl-7 space-y-2">
+                    <div className="p-2.5 rounded bg-surface border border-border font-mono text-[11px] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-text-muted">Volume Name:</span>
+                        <div className="flex items-center gap-2">
+                          <code className="text-brand-primary font-bold">{coolifyGuideModal.volume.name}</code>
+                          <button
+                            onClick={() => handleCopy(coolifyGuideModal.volume.name, 'volName')}
+                            className="op-btn-secondary !p-1 !text-[10px] flex items-center gap-1 cursor-pointer"
+                            title="Copy volume name"
+                          >
+                            {coolifyGuideModal.copiedField === 'volName' ? (
+                              <Check className="w-3 h-3 text-success" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-border-subtle">
+                        <span className="text-text-muted">Destination Path (in Container):</span>
+                        <code className="text-text-secondary">/data (or /app/uploads)</code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-surface-secondary border border-border space-y-1.5">
+                  <div className="flex items-center gap-2 font-medium text-text-primary">
+                    <span className="w-5 h-5 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[10px] font-bold">3</span>
+                    <span>Click <strong>Save</strong> and <strong>Redeploy</strong>.</span>
+                  </div>
+                  <p className="text-text-muted text-[11px] pl-7">
+                    Coolify starts the container mounted with the replicated data immediately!
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Terminal CLI Verification */}
+            <div className="space-y-2 pt-2 border-t border-border">
+              <h4 className="text-xs font-semibold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-text-muted" />
+                <span>Verify directly on Host Server (SSH / Terminal)</span>
+              </h4>
+
+              <div className="p-2.5 rounded-lg bg-black/60 border border-border font-mono text-[11px] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 truncate text-text-secondary">
+                    <span className="text-brand-primary">$</span>
+                    <span className="truncate">docker volume inspect {coolifyGuideModal.volume.name}</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(`docker volume inspect ${coolifyGuideModal.volume.name}`, 'cliInspect')}
+                    className="op-btn-ghost !p-1 text-text-muted hover:text-text-primary shrink-0 cursor-pointer"
+                    title="Copy command"
+                  >
+                    {coolifyGuideModal.copiedField === 'cliInspect' ? (
+                      <Check className="w-3.5 h-3.5 text-success" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-border-subtle">
+                  <div className="flex items-center gap-2 truncate text-text-secondary">
+                    <span className="text-brand-primary">$</span>
+                    <span className="truncate">ls -la /var/lib/docker/volumes/{coolifyGuideModal.volume.name}/_data</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(`ls -la /var/lib/docker/volumes/${coolifyGuideModal.volume.name}/_data`, 'cliLs')}
+                    className="op-btn-ghost !p-1 text-text-muted hover:text-text-primary shrink-0 cursor-pointer"
+                    title="Copy command"
+                  >
+                    {coolifyGuideModal.copiedField === 'cliLs' ? (
+                      <Check className="w-3.5 h-3.5 text-success" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setCoolifyGuideModal((prev) => ({ ...prev, isOpen: false }))}
+                className="op-btn-primary !text-xs !py-1.5 !px-3 cursor-pointer"
+              >
+                Got It, Close
+              </button>
+            </div>
           </div>
         </div>
       )}
