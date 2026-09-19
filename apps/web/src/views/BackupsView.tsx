@@ -19,6 +19,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { BackupChainVisualizer } from '../components/backups/BackupChainVisualizer';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { FilterBar } from '../components/common/FilterBar';
+import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 import { useControlPlane } from '../context/ControlPlaneContext';
 import { api } from '../services/api';
 
@@ -125,6 +126,15 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
       return matchesSearch && matchesType && matchesVerification;
     });
   }, [backups, search, typeFilter, verificationFilter]);
+
+  if (context.isLoading && backups.length === 0) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-150">
+        <MetricCardsSkeleton count={4} />
+        <TableSkeleton rows={4} columns={6} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -23,7 +23,9 @@ import {
 } from '../types';
 import { MetricCard } from '../components/common/MetricCard';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 import { useAuth } from '../context/AuthContext';
+import { useControlPlane } from '../context/ControlPlaneContext';
 
 interface OverviewViewProps {
   stats: DashboardStats;
@@ -126,6 +128,17 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const successRate = totalRuns24h > 0
     ? ((stats.backups.last24hSuccessful / totalRuns24h) * 100).toFixed(1)
     : '100.0';
+
+  const { isLoading } = useControlPlane();
+
+  if (isLoading && stats.infrastructure.totalServers === 0 && stats.databases.totalDatabases === 0) {
+    return (
+      <div className="space-y-5 animate-in fade-in duration-150">
+        <MetricCardsSkeleton count={4} />
+        <TableSkeleton rows={5} columns={5} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

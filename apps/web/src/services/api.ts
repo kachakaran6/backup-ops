@@ -594,6 +594,23 @@ export async function removeCredential(id: string): Promise<void> {
   } catch {}
 }
 
+export async function createJob(data: {
+  operationType: string;
+  sourceResourceId: string;
+  destinationResourceId?: string;
+  options?: Record<string, any>;
+}): Promise<Job | null> {
+  try {
+    const res = await authFetch(`${API_BASE}/jobs?organizationId=default`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+
 export async function retryJob(id: string): Promise<void> {
   try {
     await authFetch(`${API_BASE}/jobs/${id}/retry?organizationId=default`, { method: 'POST' });
@@ -675,6 +692,7 @@ export const api = {
   },
   jobs: {
     list: fetchJobs,
+    create: createJob,
     retry: retryJob,
     cancel: cancelJob,
   },

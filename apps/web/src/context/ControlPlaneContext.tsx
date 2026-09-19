@@ -23,6 +23,7 @@ interface ControlPlaneContextType {
   chains: BackupChain[];
   policies: Policy[];
   restoreJobs: RestoreJob[];
+  isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => Promise<void>;
 }
@@ -31,6 +32,7 @@ const ControlPlaneContext = createContext<ControlPlaneContextType | undefined>(u
 
 export const ControlPlaneProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [stats, setStats] = useState<DashboardStats>({
@@ -86,6 +88,8 @@ export const ControlPlaneProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setRestoreJobs(restoreList);
     } catch (err) {
       console.error('Failed to load control plane state:', err);
+    } finally {
+      setIsLoading(false);
     }
   }, [isAuthenticated]);
 
@@ -115,6 +119,7 @@ export const ControlPlaneProvider: React.FC<{ children: React.ReactNode }> = ({ 
         chains,
         policies,
         restoreJobs,
+        isLoading,
         isRefreshing,
         refresh,
       }}

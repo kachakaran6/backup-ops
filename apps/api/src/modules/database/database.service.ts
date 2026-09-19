@@ -34,10 +34,54 @@ export class DatabaseService {
   ) {}
 
   async findAll(organizationId: string): Promise<Database[]> {
+    await this.cleanupDuplicates(organizationId);
     return this.databaseRepo.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async cleanupDuplicates(organizationId: string): Promise<void> {
+    try {
+      const dbs = await this.databaseRepo.find({
+        where: { organizationId },
+        order: { createdAt: 'DESC' },
+      });
+
+      const seen = new Map<string, Database>();
+      const toRemove: Database[] = [];
+
+      for (const db of dbs) {
+        const key = db.name.toLowerCase().trim();
+        if (!seen.has(key)) {
+          seen.set(key, db);
+        } else {
+          const existing = seen.get(key)!;
+          // Prefer CONNECTED status
+          if (existing.status === DatabaseStatus.CONNECTED && db.status !== DatabaseStatus.CONNECTED) {
+            toRemove.push(db);
+          } else if (db.status === DatabaseStatus.CONNECTED && existing.status !== DatabaseStatus.CONNECTED) {
+            toRemove.push(existing);
+            seen.set(key, db);
+          } else {
+            // Keep the one with credentialId or newer
+            if (!existing.credentialId && db.credentialId) {
+              toRemove.push(existing);
+              seen.set(key, db);
+            } else {
+              toRemove.push(db);
+            }
+          }
+        }
+      }
+
+      if (toRemove.length > 0) {
+        await this.databaseRepo.remove(toRemove);
+        this.logger.log(`Cleaned up ${toRemove.length} duplicate database records for organization ${organizationId}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Error during duplicate cleanup: ${err.message}`);
+    }
   }
 
   async findOne(organizationId: string, id: string): Promise<Database> {

@@ -6,11 +6,17 @@ import {
   Box,
   FolderArchive,
   Info,
+  Copy,
+  CheckCircle2,
+  X,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { Server as ServerType } from '../types';
 import * as api from '../services/api';
 import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 
 export const DockerView: React.FC = () => {
   const [servers, setServers] = useState<ServerType[]>([]);
@@ -18,6 +24,28 @@ export const DockerView: React.FC = () => {
   const [dockerData, setDockerData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [inspecting, setInspecting] = useState<boolean>(false);
+
+  const [replicateModal, setReplicateModal] = useState<{
+    isOpen: boolean;
+    volume: any | null;
+    targetServerId: string;
+    targetVolumeName: string;
+    protocol: 'rsync' | 'archive';
+    verifyChecksum: boolean;
+    dryRun: boolean;
+    submitting: boolean;
+    successMessage: string | null;
+  }>({
+    isOpen: false,
+    volume: null,
+    targetServerId: '',
+    targetVolumeName: '',
+    protocol: 'rsync',
+    verifyChecksum: true,
+    dryRun: false,
+    submitting: false,
+    successMessage: null,
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -55,7 +83,61 @@ export const DockerView: React.FC = () => {
     await inspectDocker(serverId);
   };
 
+  const handleOpenReplicate = (vol: any) => {
+    const otherServers = servers.filter((s) => s.id !== selectedServerId);
+    setReplicateModal({
+      isOpen: true,
+      volume: vol,
+      targetServerId: otherServers[0]?.id || '',
+      targetVolumeName: vol.name,
+      protocol: 'rsync',
+      verifyChecksum: true,
+      dryRun: false,
+      submitting: false,
+      successMessage: null,
+    });
+  };
+
+  const handleReplicateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replicateModal.volume || !replicateModal.targetServerId) return;
+
+    setReplicateModal((prev) => ({ ...prev, submitting: true }));
+    try {
+      const job = await api.createJob({
+        operationType: 'copy',
+        sourceResourceId: selectedServer?.id || '',
+        destinationResourceId: replicateModal.targetServerId,
+        options: {
+          sourceVolume: replicateModal.volume.name,
+          destinationVolume: replicateModal.targetVolumeName || replicateModal.volume.name,
+          protocol: replicateModal.protocol,
+          verifyChecksum: replicateModal.verifyChecksum,
+          dryRun: replicateModal.dryRun,
+        },
+      });
+
+      setReplicateModal((prev) => ({
+        ...prev,
+        submitting: false,
+        successMessage: `Replication job #${job?.id?.slice(0, 8) || 'COPY'} initiated successfully. Live stream progress is available in Operations.`,
+      }));
+    } catch (err: any) {
+      alert('Failed to initiate volume replication: ' + err.message);
+      setReplicateModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
   const selectedServer = servers.find((s) => s.id === selectedServerId);
+
+  if (loading && servers.length === 0) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-150">
+        <MetricCardsSkeleton count={4} />
+        <TableSkeleton rows={4} columns={5} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -241,6 +323,7 @@ export const DockerView: React.FC = () => {
                           <th>Volume Name</th>
                           <th>Driver</th>
                           <th>Mountpoint</th>
+                          <th className="text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="font-mono text-[11px]">
@@ -249,6 +332,16 @@ export const DockerView: React.FC = () => {
                             <td className="text-text-primary font-medium">{v.name}</td>
                             <td className="text-text-muted">{v.driver || 'local'}</td>
                             <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>
+                            <td className="text-right font-sans">
+                              <button
+                                onClick={() => handleOpenReplicate(v)}
+                                className="op-btn-secondary !text-[11px] !py-1 !px-2 flex items-center gap-1.5 ml-auto cursor-pointer"
+                                title="Replicate volume to another server"
+                              >
+                                <Copy className="w-3 h-3 text-brand-primary" />
+                                <span>Replicate</span>
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -262,6 +355,185 @@ export const DockerView: React.FC = () => {
               </div>
             </div>
           ) : null}
+        </div>
+      )}
+
+      {/* Replicate Volume Modal */}
+      {replicateModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="op-card-elevated max-w-lg w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <Copy className="w-4 h-4 text-brand-primary" />
+                <h3 className="font-semibold text-sm text-text-primary">
+                  Replicate Volume to Target Server
+                </h3>
+              </div>
+              <button
+                onClick={() => setReplicateModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-text-muted hover:text-text-primary p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {replicateModal.successMessage ? (
+              <div className="space-y-4 py-2">
+                <div className="p-3.5 rounded-lg bg-success/10 border border-success/30 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <span className="font-semibold text-success block">Replication Dispatched</span>
+                    <p className="text-text-secondary leading-relaxed">
+                      {replicateModal.successMessage}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <a
+                    href="/operations"
+                    className="op-btn-primary flex items-center gap-1.5 !text-xs !py-1.5 !px-3"
+                  >
+                    <span>View Operations</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                  <button
+                    onClick={() => setReplicateModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="op-btn-secondary !text-xs !py-1.5 !px-3"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleReplicateSubmit} className="space-y-3.5 text-xs">
+                {/* Source details */}
+                <div className="p-3 rounded bg-surface-secondary/50 border border-border space-y-1">
+                  <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider block">Source Volume</span>
+                  <div className="font-mono text-xs text-text-primary font-medium flex items-center gap-2">
+                    <FolderArchive className="w-3.5 h-3.5 text-text-muted" />
+                    <span>{replicateModal.volume?.name}</span>
+                    <span className="text-text-muted text-[11px]">on {selectedServer?.name} ({selectedServer?.host})</span>
+                  </div>
+                </div>
+
+                {/* Target Server */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-text-secondary">Destination Server Host</label>
+                  <select
+                    value={replicateModal.targetServerId}
+                    onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetServerId: e.target.value }))}
+                    className="op-input w-full"
+                    required
+                  >
+                    <option value="" disabled>Select target server...</option>
+                    {servers
+                      .filter((s) => s.id !== selectedServerId)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.host})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Target Volume Name */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-text-secondary">Destination Volume Name</label>
+                  <input
+                    type="text"
+                    value={replicateModal.targetVolumeName}
+                    onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetVolumeName: e.target.value }))}
+                    className="op-input w-full font-mono"
+                    placeholder="Same as source volume name"
+                    required
+                  />
+                  <span className="text-[10px] text-text-muted">Will be created or updated on the destination host.</span>
+                </div>
+
+                {/* Protocol */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-text-secondary">Transfer Protocol</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReplicateModal((prev) => ({ ...prev, protocol: 'rsync' }))}
+                      className={`p-2.5 rounded text-left border transition-colors cursor-pointer ${
+                        replicateModal.protocol === 'rsync'
+                          ? 'bg-brand/10 border-brand-primary text-text-primary font-medium'
+                          : 'bg-surface border-border text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      <div className="font-semibold text-xs text-text-primary">Rsync Stream (Direct)</div>
+                      <div className="text-[10px] text-text-muted mt-0.5">Encrypted SSH delta sync</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReplicateModal((prev) => ({ ...prev, protocol: 'archive' }))}
+                      className={`p-2.5 rounded text-left border transition-colors cursor-pointer ${
+                        replicateModal.protocol === 'archive'
+                          ? 'bg-brand/10 border-brand-primary text-text-primary font-medium'
+                          : 'bg-surface border-border text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      <div className="font-semibold text-xs text-text-primary">Compressed Archive</div>
+                      <div className="text-[10px] text-text-muted mt-0.5">Tar.gz snapshot & extract</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Options */}
+                <div className="space-y-2 pt-1 border-t border-border">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={replicateModal.verifyChecksum}
+                      onChange={(e) => setReplicateModal((prev) => ({ ...prev, verifyChecksum: e.target.checked }))}
+                      className="rounded border-border"
+                    />
+                    <span className="text-text-secondary text-xs">Verify SHA-256 integrity checksum after transfer</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={replicateModal.dryRun}
+                      onChange={(e) => setReplicateModal((prev) => ({ ...prev, dryRun: e.target.checked }))}
+                      className="rounded border-border"
+                    />
+                    <span className="text-text-secondary text-xs">Dry-run (simulate transfer without writing data)</span>
+                  </label>
+                </div>
+
+                {/* Footer buttons */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setReplicateModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="op-btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={replicateModal.submitting || !replicateModal.targetServerId}
+                    className="op-btn-primary flex items-center gap-1.5"
+                  >
+                    {replicateModal.submitting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Initiating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Start Replication</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
     </div>

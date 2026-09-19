@@ -201,6 +201,31 @@ export class CoolifyService {
         await this.reconcileCoolifyDatabase(organizationId, conn, gdb);
       }
 
+      // Clean up any stale duplicate databases for this organization
+      const allDbs = await this.databaseRepo.find({ where: { organizationId } });
+      const seenNames = new Map<string, Database>();
+      const toRemoveDbs: Database[] = [];
+      for (const d of allDbs) {
+        const key = d.name.toLowerCase().trim();
+        if (!seenNames.has(key)) {
+          seenNames.set(key, d);
+        } else {
+          const existing = seenNames.get(key)!;
+          if (existing.status === DatabaseStatus.CONNECTED && d.status !== DatabaseStatus.CONNECTED) {
+            toRemoveDbs.push(d);
+          } else if (d.status === DatabaseStatus.CONNECTED && existing.status !== DatabaseStatus.CONNECTED) {
+            toRemoveDbs.push(existing);
+            seenNames.set(key, d);
+          } else {
+            toRemoveDbs.push(d);
+          }
+        }
+      }
+      if (toRemoveDbs.length > 0) {
+        await this.databaseRepo.remove(toRemoveDbs);
+        this.logger.log(`Pruned ${toRemoveDbs.length} duplicate database records after sync`);
+      }
+
       // 3. Update connection stats accurately from durable database records
       const serversCount = await this.serverRepo.count({
         where: { organizationId, coolifyConnectionId: conn.id },
@@ -323,13 +348,12 @@ export class CoolifyService {
       status = DatabaseStatus.DISCONNECTED;
     }
 
-    // Find or create Database entity
+    // Find or create Database entity (match by UUID or name to prevent duplicates)
     let db = await this.databaseRepo.findOne({
-      where: {
-        organizationId,
-        coolifyConnectionId: conn.id,
-        coolifyResourceUuid: gdb.uuid,
-      },
+      where: [
+        { organizationId, coolifyConnectionId: conn.id, coolifyResourceUuid: gdb.uuid },
+        { organizationId, name: gdb.name },
+      ],
     });
 
     const serverUuid = gdb.destination?.server?.uuid || gdb.server?.uuid || defaultServer?.coolifyServerUuid;

@@ -17,6 +17,8 @@ import { Database, DatabaseType } from '../types';
 import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { FilterBar } from '../components/common/FilterBar';
+import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
+import { useControlPlane } from '../context/ControlPlaneContext';
 import * as api from '../services/api';
 
 interface DatabasesViewProps {
@@ -32,6 +34,7 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
   onSelectDatabase,
   onTriggerBackup,
 }) => {
+  const { isLoading } = useControlPlane();
   const [search, setSearch] = useState('');
   const [engineFilter, setEngineFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -114,6 +117,15 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
       return matchesSearch && matchesEngine && matchesStatus;
     });
   }, [databases, search, engineFilter, statusFilter]);
+
+  if (isLoading && databases.length === 0) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-150">
+        <MetricCardsSkeleton count={4} />
+        <TableSkeleton rows={4} columns={7} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
