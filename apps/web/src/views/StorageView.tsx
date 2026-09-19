@@ -213,9 +213,10 @@ export const StorageView: React.FC<StorageViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredDestinations.map((dest) => {
             const isLocal = dest.type === 'local';
-            const usedBytes = dest.usedCapacityBytes || 0;
-            const totalBytes = dest.totalCapacityBytes || 0;
-            const percent = totalBytes > 0 ? Math.min(100, Math.round((usedBytes / totalBytes) * 100)) : 0;
+            const usedBytes = Number(dest.usedCapacityBytes) || 0;
+            const totalBytes = Number(dest.totalCapacityBytes) || 0;
+            const rawPercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+            const percent = Math.round(rawPercent);
 
             return (
               <div
@@ -245,12 +246,14 @@ export const StorageView: React.FC<StorageViewProps> = ({
                   <div className="space-y-1 pt-2 border-t border-border-subtle text-[11px] font-mono">
                     <div className="flex justify-between text-text-muted text-[10px]">
                       <span>CAPACITY UTILIZATION</span>
-                      <span className="text-text-primary font-semibold">{percent}%</span>
+                      <span className="text-text-primary font-semibold">
+                        {usedBytes > 0 && percent === 0 ? '< 1%' : `${percent}%`}
+                      </span>
                     </div>
                     <div className="w-full h-1.5 bg-surface-secondary rounded-full overflow-hidden border border-border">
                       <div
                         className="bg-brand-primary h-full rounded-full transition-all"
-                        style={{ width: `${percent}%` }}
+                        style={{ width: `${Math.max(usedBytes > 0 ? 3 : 0, percent)}%` }}
                       ></div>
                     </div>
                     <div className="flex justify-between text-[10px] text-text-muted pt-0.5">

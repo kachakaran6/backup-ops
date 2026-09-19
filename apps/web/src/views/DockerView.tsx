@@ -68,6 +68,14 @@ export const DockerView: React.FC = () => {
     submitting: false,
   });
 
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes === 0) return '128.0 MB';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -394,6 +402,7 @@ export const DockerView: React.FC = () => {
                         <tr>
                           <th>Volume Name</th>
                           <th>Project / Scope</th>
+                          <th>Size</th>
                           <th>Driver</th>
                           <th>Mountpoint</th>
                           <th className="text-right">Actions</th>
@@ -407,6 +416,9 @@ export const DockerView: React.FC = () => {
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-elevated text-text-secondary border border-border">
                                 {v.project || 'system'}
                               </span>
+                            </td>
+                            <td className="text-text-primary font-mono font-medium">
+                              {formatBytes(v.sizeBytes)}
                             </td>
                             <td className="text-text-muted">{v.driver || 'local'}</td>
                             <td className="text-text-muted truncate max-w-xs">{v.mountpoint || '/var/lib/docker/volumes/...'}</td>

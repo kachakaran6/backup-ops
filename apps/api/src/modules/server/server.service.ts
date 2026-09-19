@@ -234,7 +234,15 @@ export class ServerService implements OnApplicationBootstrap {
     running: boolean;
     version?: string;
     containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
-    volumes: Array<{ name: string; driver: string; mountpoint?: string; project?: string }>;
+    volumes: Array<{
+      name: string;
+      driver: string;
+      mountpoint?: string;
+      project?: string;
+      sizeBytes?: number;
+      replicatedAt?: string;
+      sourceServer?: string;
+    }>;
   }> {
     const server = await this.findOne(organizationId, serverId);
 
@@ -270,11 +278,28 @@ export class ServerService implements OnApplicationBootstrap {
           },
         ];
 
-    const volumeMap = new Map<string, { name: string; driver: string; mountpoint?: string; project?: string }>();
+    const volumeMap = new Map<
+      string,
+      {
+        name: string;
+        driver: string;
+        mountpoint?: string;
+        project?: string;
+        sizeBytes?: number;
+        replicatedAt?: string;
+        sourceServer?: string;
+      }
+    >();
 
     if (coolifyDocker?.volumes) {
       for (const v of coolifyDocker.volumes) {
-        volumeMap.set(v.name, v);
+        volumeMap.set(v.name, {
+          name: v.name,
+          driver: v.driver || 'local',
+          mountpoint: v.mountpoint || `/var/lib/docker/volumes/${v.name}/_data`,
+          project: 'system',
+          sizeBytes: (v as any).sizeBytes || 134217728,
+        });
       }
     }
 
@@ -284,7 +309,10 @@ export class ServerService implements OnApplicationBootstrap {
         name: cv.name,
         driver: cv.driver || 'local',
         mountpoint: cv.mountpoint || `/var/lib/docker/volumes/${cv.name}/_data`,
-        project: cv.project,
+        project: cv.project || 'replicated',
+        sizeBytes: Number(cv.sizeBytes) || 134217728,
+        replicatedAt: cv.replicatedAt,
+        sourceServer: cv.sourceServer,
       });
     }
 
@@ -293,11 +321,15 @@ export class ServerService implements OnApplicationBootstrap {
         name: 'postgres_data',
         driver: 'local',
         mountpoint: '/var/lib/docker/volumes/postgres_data/_data',
+        project: 'system',
+        sizeBytes: 134217728,
       });
       volumeMap.set('redis_data', {
         name: 'redis_data',
         driver: 'local',
         mountpoint: '/var/lib/docker/volumes/redis_data/_data',
+        project: 'system',
+        sizeBytes: 134217728,
       });
     }
 

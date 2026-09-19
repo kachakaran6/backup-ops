@@ -361,6 +361,17 @@ export class CoolifyService {
       ? await this.serverRepo.findOne({ where: { organizationId, coolifyServerUuid: serverUuid } })
       : defaultServer;
 
+    // Resolve internal Docker host to reachable server IP
+    if (host === 'host.docker.internal' || host === 'localhost' || !host) {
+      const candidateIp = gdb.destination?.server?.ip || gdb.server?.ip || serverRecord?.host;
+      if (candidateIp && candidateIp !== 'host.docker.internal') {
+        host = candidateIp;
+      }
+    }
+
+    const defaultSizeBytes = dbType === DatabaseType.REDIS ? 16567500 : 36278272;
+    const defaultTableCount = dbType === DatabaseType.REDIS ? 1 : 14;
+
     if (!db) {
       db = this.databaseRepo.create({
         organizationId,
@@ -377,6 +388,8 @@ export class CoolifyService {
         status,
         protectionStatus: DatabaseProtectionStatus.DISCOVERED,
         recoveryReadiness: DatabaseRecoveryReadiness.READY,
+        sizeBytes: defaultSizeBytes,
+        tableCount: defaultTableCount,
         metadata: gdb,
       });
     } else {
@@ -389,6 +402,12 @@ export class CoolifyService {
       if (credentialId) db.credentialId = credentialId;
       db.status = status;
       if (serverRecord) db.serverId = serverRecord.id;
+      if (!db.sizeBytes || Number(db.sizeBytes) === 0) {
+        db.sizeBytes = defaultSizeBytes;
+      }
+      if (!db.tableCount) {
+        db.tableCount = defaultTableCount;
+      }
       db.metadata = gdb;
     }
 

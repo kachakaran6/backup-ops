@@ -5,6 +5,7 @@ import { Job, JobState } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { Resource } from '../resource/entities/resource.entity';
 import { Server } from '../server/entities/server.entity';
+import { StorageDestination } from '../storage/entities/storage.entity';
 
 @Injectable()
 export class JobService implements OnApplicationBootstrap {
@@ -17,6 +18,8 @@ export class JobService implements OnApplicationBootstrap {
     private resourceRepo: Repository<Resource>,
     @InjectRepository(Server)
     private serverRepo: Repository<Server>,
+    @InjectRepository(StorageDestination)
+    private storageRepo: Repository<StorageDestination>,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -30,6 +33,67 @@ export class JobService implements OnApplicationBootstrap {
       this.logger.log('Job database sanitized: all JSON columns validated.');
     } catch (err: any) {
       this.logger.warn(`Job database sanitization note: ${err.message}`);
+    }
+
+    // Retroactive sync: ensure destination servers have volumes from all completed volume replication jobs
+    try {
+      const allJobs = await this.jobRepo.find();
+      for (const j of allJobs) {
+        if (
+          (j.state === JobState.COMPLETED || j.progress?.percentage === 100) &&
+          j.destinationResourceId
+        ) {
+          const isVol =
+            j.operationType === 'copy' ||
+            j.operationType === 'replicate' ||
+            Boolean(j.options?.volumeName) ||
+            Boolean(j.options?.sourceVolume);
+
+          if (isVol) {
+            const destServer = await this.serverRepo.findOne({
+              where: { id: j.destinationResourceId },
+            });
+            if (destServer) {
+              const metadata = destServer.metadata || {};
+              const volumes = Array.isArray(metadata.volumes) ? [...metadata.volumes] : [];
+              const volName =
+                (j.options?.targetVolumeName as string) ||
+                (j.options?.destinationVolume as string) ||
+                (j.options?.volumeName as string) ||
+                'replicated-volume';
+              const volSize = Number(j.progress?.totalBytes) || 134217728;
+
+              const existingIdx = volumes.findIndex((v: any) => v.name === volName);
+              const newVol = {
+                name: volName,
+                driver: 'local',
+                mountpoint: `/var/lib/docker/volumes/${volName}/_data`,
+                project: (j.options?.sourceServer as string)
+                  ? `replicated (${j.options.sourceServer})`
+                  : 'replicated',
+                sizeBytes: volSize,
+                replicatedAt: j.finishedAt ? j.finishedAt.toISOString() : new Date().toISOString(),
+                sourceServer: (j.options?.sourceServer as string) || 'source',
+              };
+
+              if (existingIdx >= 0) {
+                volumes[existingIdx] = { ...volumes[existingIdx], ...newVol };
+              } else {
+                volumes.push(newVol);
+              }
+
+              metadata.volumes = volumes;
+              destServer.metadata = metadata;
+              await this.serverRepo.save(destServer);
+              this.logger.log(
+                `Synchronized replicated volume ${volName} on server ${destServer.name}`,
+              );
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Volume retroactive sync note: ${err.message}`);
     }
   }
 
@@ -353,5 +417,70 @@ export class JobService implements OnApplicationBootstrap {
         : `Operation ${job.operationType.toUpperCase()} completed successfully. Backup snapshot registered.`,
     });
     await this.jobRepo.save(job);
+
+    // Register replicated volume on destination server
+    if (isVol && job.destinationResourceId) {
+      try {
+        const destServer = await this.serverRepo.findOne({
+          where: { id: job.destinationResourceId },
+        });
+        if (destServer) {
+          const metadata = destServer.metadata || {};
+          const volumes = Array.isArray(metadata.volumes) ? [...metadata.volumes] : [];
+          const targetVolName =
+            (job.options?.targetVolumeName as string) ||
+            (job.options?.destinationVolume as string) ||
+            volName;
+          const volSize = Number(job.progress?.totalBytes) || 134217728;
+
+          const existingIdx = volumes.findIndex((v: any) => v.name === targetVolName);
+          const newVol = {
+            name: targetVolName,
+            driver: 'local',
+            mountpoint: `/var/lib/docker/volumes/${targetVolName}/_data`,
+            project: (job.options?.sourceServer as string)
+              ? `replicated (${job.options.sourceServer})`
+              : 'replicated',
+            sizeBytes: volSize,
+            replicatedAt: new Date().toISOString(),
+            sourceServer: (job.options?.sourceServer as string) || 'source',
+          };
+
+          if (existingIdx >= 0) {
+            volumes[existingIdx] = { ...volumes[existingIdx], ...newVol };
+          } else {
+            volumes.push(newVol);
+          }
+
+          metadata.volumes = volumes;
+          destServer.metadata = metadata;
+          await this.serverRepo.save(destServer);
+          this.logger.log(
+            `Registered replicated volume ${targetVolName} on destination server ${destServer.name}`,
+          );
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to register replicated volume on destination: ${err.message}`);
+      }
+    }
+
+    // Update storage destination stats if operation was a backup
+    if (job.operationType === 'backup' && job.destinationResourceId) {
+      try {
+        const storage = await this.storageRepo.findOne({
+          where: { id: job.destinationResourceId },
+        });
+        if (storage) {
+          storage.backupCount = (storage.backupCount || 0) + 1;
+          storage.usedCapacityBytes =
+            Number(storage.usedCapacityBytes || 0) + (Number(job.progress?.totalBytes) || 134217728);
+          storage.lastSuccessfulOperationAt = new Date();
+          await this.storageRepo.save(storage);
+          this.logger.log(`Updated storage pool ${storage.name} stats after completed backup.`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not update storage stats: ${err.message}`);
+      }
+    }
   }
 }

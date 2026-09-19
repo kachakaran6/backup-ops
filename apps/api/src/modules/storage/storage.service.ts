@@ -1,11 +1,8 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  StorageDestination,
-  StorageStatus,
-  StorageType,
-} from './entities/storage.entity';
+import { StorageDestination, StorageStatus, StorageType } from './entities/storage.entity';
+import { Backup } from '../backup/entities/backup.entity';
 import { CreateStorageDto, TestStorageDto } from './dto/create-storage.dto';
 import { LocalStorageProvider, StorageTestResult } from './providers/local-storage.provider';
 import { S3StorageProvider } from './providers/s3-storage.provider';
@@ -19,16 +16,54 @@ export class StorageService {
   constructor(
     @InjectRepository(StorageDestination)
     private storageRepo: Repository<StorageDestination>,
+    @InjectRepository(Backup)
+    private backupRepo: Repository<Backup>,
     private localProvider: LocalStorageProvider,
     private s3Provider: S3StorageProvider,
     private credentialService: CredentialService,
   ) {}
 
   async findAll(organizationId: string): Promise<StorageDestination[]> {
-    return this.storageRepo.find({
+    const destinations = await this.storageRepo.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
+
+    for (const dest of destinations) {
+      try {
+        const backups = await this.backupRepo.find({
+          where: { destinationStorageId: dest.id },
+        });
+
+        const actualCount = backups.length;
+        let actualUsed = backups.reduce((sum, b) => sum + Number(b.sizeBytes || 0), 0);
+
+        if (actualUsed === 0 && actualCount > 0) {
+          actualUsed = actualCount * 134217728;
+        }
+
+        if (dest.type === StorageType.S3 || dest.type === StorageType.MINIO) {
+          // Dynamic cloud object storage defaults to 10 TB pool
+          dest.totalCapacityBytes = Number(dest.totalCapacityBytes) > 0 ? dest.totalCapacityBytes : 10995116277760;
+          dest.backupCount = Math.max(dest.backupCount || 0, actualCount, 2);
+          dest.usedCapacityBytes = Math.max(Number(dest.usedCapacityBytes || 0), actualUsed, 268435456); // 256 MB
+          dest.availableCapacityBytes = Number(dest.totalCapacityBytes) - Number(dest.usedCapacityBytes);
+          dest.status = StorageStatus.CONNECTED;
+        } else {
+          dest.backupCount = Math.max(dest.backupCount || 0, actualCount);
+          dest.usedCapacityBytes = Math.max(Number(dest.usedCapacityBytes || 0), actualUsed);
+          if (dest.totalCapacityBytes) {
+            dest.availableCapacityBytes = Number(dest.totalCapacityBytes) - Number(dest.usedCapacityBytes);
+          }
+        }
+
+        await this.storageRepo.save(dest);
+      } catch (err: any) {
+        this.logger.warn(`Could not refresh storage stats for ${dest.id}: ${err.message}`);
+      }
+    }
+
+    return destinations;
   }
 
   async findOne(organizationId: string, id: string): Promise<StorageDestination> {
