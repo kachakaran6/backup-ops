@@ -12,12 +12,14 @@ import {
   ArrowRight,
   ShieldCheck,
   Plus,
+  Check,
 } from 'lucide-react';
 import { Server as ServerType } from '../types';
 import * as api from '../services/api';
 import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
+import { Select } from '../components/common/Select';
 
 export const DockerView: React.FC = () => {
   const [servers, setServers] = useState<ServerType[]>([]);
@@ -479,21 +481,19 @@ export const DockerView: React.FC = () => {
                 {/* Target Server */}
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-text-secondary">Destination Server Host</label>
-                  <select
+                  <Select
                     value={replicateModal.targetServerId}
-                    onChange={(e) => setReplicateModal((prev) => ({ ...prev, targetServerId: e.target.value }))}
-                    className="op-input w-full"
-                    required
-                  >
-                    <option value="" disabled>Select target server...</option>
-                    {servers
+                    onValueChange={(val) => setReplicateModal((prev) => ({ ...prev, targetServerId: val }))}
+                    placeholder="Select destination server..."
+                    options={servers
                       .filter((s) => s.id !== selectedServerId)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.host})
-                        </option>
-                      ))}
-                  </select>
+                      .map((s) => ({
+                        value: s.id,
+                        label: s.name,
+                        sublabel: s.host,
+                        icon: Server,
+                      }))}
+                  />
                 </div>
 
                 {/* Target Volume Name */}
@@ -511,32 +511,59 @@ export const DockerView: React.FC = () => {
                 </div>
 
                 {/* Protocol */}
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="text-[11px] font-medium text-text-secondary">Transfer Protocol</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => setReplicateModal((prev) => ({ ...prev, protocol: 'rsync' }))}
-                      className={`p-2.5 rounded text-left border transition-colors cursor-pointer ${
+                      className={`relative p-3 rounded-lg text-left border transition-all cursor-pointer flex flex-col justify-between ${
                         replicateModal.protocol === 'rsync'
-                          ? 'bg-brand/10 border-brand-primary text-text-primary font-medium'
-                          : 'bg-surface border-border text-text-muted hover:text-text-primary'
+                          ? 'bg-brand/10 border-brand ring-1 ring-brand shadow-xs'
+                          : 'bg-surface border-border text-text-muted hover:border-border-strong hover:bg-surface-hover'
                       }`}
                     >
-                      <div className="font-semibold text-xs text-text-primary">Rsync Stream (Direct)</div>
-                      <div className="text-[10px] text-text-muted mt-0.5">Encrypted SSH delta sync</div>
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <div className="font-semibold text-xs text-text-primary">
+                          Rsync Stream (Direct)
+                        </div>
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
+                            replicateModal.protocol === 'rsync'
+                              ? 'border-brand bg-brand text-white'
+                              : 'border-border bg-surface'
+                          }`}
+                        >
+                          {replicateModal.protocol === 'rsync' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-text-muted">Encrypted SSH delta sync</div>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => setReplicateModal((prev) => ({ ...prev, protocol: 'archive' }))}
-                      className={`p-2.5 rounded text-left border transition-colors cursor-pointer ${
+                      className={`relative p-3 rounded-lg text-left border transition-all cursor-pointer flex flex-col justify-between ${
                         replicateModal.protocol === 'archive'
-                          ? 'bg-brand/10 border-brand-primary text-text-primary font-medium'
-                          : 'bg-surface border-border text-text-muted hover:text-text-primary'
+                          ? 'bg-brand/10 border-brand ring-1 ring-brand shadow-xs'
+                          : 'bg-surface border-border text-text-muted hover:border-border-strong hover:bg-surface-hover'
                       }`}
                     >
-                      <div className="font-semibold text-xs text-text-primary">Compressed Archive</div>
-                      <div className="text-[10px] text-text-muted mt-0.5">Tar.gz snapshot & extract</div>
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <div className="font-semibold text-xs text-text-primary">
+                          Compressed Archive
+                        </div>
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
+                            replicateModal.protocol === 'archive'
+                              ? 'border-brand bg-brand text-white'
+                              : 'border-border bg-surface'
+                          }`}
+                        >
+                          {replicateModal.protocol === 'archive' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-text-muted">Tar.gz snapshot & extract</div>
                     </button>
                   </div>
                 </div>
