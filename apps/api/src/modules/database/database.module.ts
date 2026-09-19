@@ -6,6 +6,7 @@ import { BackupChain } from '../backup/entities/backup-chain.entity';
 import { DatabaseService } from './database.service';
 import { DatabaseController } from './database.controller';
 import { PostgreSqlProvider } from './providers/postgresql.provider';
+import { RedisProvider } from './providers/redis.provider';
 import { CredentialModule } from '../credential/credential.module';
 
 @Module({
@@ -14,7 +15,7 @@ import { CredentialModule } from '../credential/credential.module';
     CredentialModule,
   ],
   controllers: [DatabaseController],
-  providers: [DatabaseService, PostgreSqlProvider],
-  exports: [DatabaseService, PostgreSqlProvider],
+  providers: [DatabaseService, PostgreSqlProvider, RedisProvider],
+  exports: [DatabaseService, PostgreSqlProvider, RedisProvider],
 })
 export class DatabaseModule {}

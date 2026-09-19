@@ -12,6 +12,7 @@ import { Backup } from '../backup/entities/backup.entity';
 import { BackupChain, BackupChainStatus } from '../backup/entities/backup-chain.entity';
 import { CreateDatabaseDto, TestDatabaseDto } from './dto/create-database.dto';
 import { PostgreSqlProvider } from './providers/postgresql.provider';
+import { RedisProvider } from './providers/redis.provider';
 import { CredentialService } from '../credential/credential.service';
 import { CredentialType } from '../credential/entities/credential.entity';
 import { DatabaseConnectionTestResult, WalStatusResult } from './providers/database-provider.interface';
@@ -28,6 +29,7 @@ export class DatabaseService {
     @InjectRepository(BackupChain)
     private chainRepo: Repository<BackupChain>,
     private pgProvider: PostgreSqlProvider,
+    private redisProvider: RedisProvider,
     private credentialService: CredentialService,
   ) {}
 
@@ -49,6 +51,16 @@ export class DatabaseService {
   }
 
   async testConnection(dto: TestDatabaseDto): Promise<DatabaseConnectionTestResult> {
+    if (dto.type === DatabaseType.REDIS || dto.port === 6379) {
+      return this.redisProvider.testConnection({
+        host: dto.host,
+        port: dto.port || 6379,
+        database: dto.databaseName || '0',
+        user: dto.username || 'default',
+        password: dto.password,
+      });
+    }
+
     return this.pgProvider.testConnection({
       host: dto.host,
       port: dto.port || 5432,
@@ -65,7 +77,7 @@ export class DatabaseService {
         name: `Credentials for ${dto.name}`,
         type: CredentialType.DATABASE_PASSWORD,
         secretPayload: {
-          username: dto.username || 'postgres',
+          username: dto.username || (dto.type === DatabaseType.REDIS ? 'default' : 'postgres'),
           password: dto.password,
         },
       });
@@ -73,13 +85,22 @@ export class DatabaseService {
     }
 
     // Run connection test
-    const testRes = await this.pgProvider.testConnection({
-      host: dto.host,
-      port: dto.port || 5432,
-      database: dto.databaseName,
-      user: dto.username || 'postgres',
-      password: dto.password,
-    });
+    const testRes =
+      dto.type === DatabaseType.REDIS || dto.port === 6379
+        ? await this.redisProvider.testConnection({
+            host: dto.host,
+            port: dto.port || 6379,
+            database: dto.databaseName || '0',
+            user: dto.username || 'default',
+            password: dto.password,
+          })
+        : await this.pgProvider.testConnection({
+            host: dto.host,
+            port: dto.port || 5432,
+            database: dto.databaseName,
+            user: dto.username || 'postgres',
+            password: dto.password,
+          });
 
     const db = this.databaseRepo.create({
       organizationId,
@@ -88,9 +109,9 @@ export class DatabaseService {
       type: dto.type || DatabaseType.POSTGRES,
       version: testRes.version,
       host: dto.host,
-      port: dto.port || 5432,
-      databaseName: dto.databaseName,
-      username: dto.username || 'postgres',
+      port: dto.port || (dto.type === DatabaseType.REDIS ? 6379 : 5432),
+      databaseName: dto.databaseName || (dto.type === DatabaseType.REDIS ? '0' : 'postgres'),
+      username: dto.username || (dto.type === DatabaseType.REDIS ? 'default' : 'postgres'),
       credentialId,
       status: testRes.success ? DatabaseStatus.CONNECTED : DatabaseStatus.UNREACHABLE,
       protectionStatus: dto.protectionStatus || DatabaseProtectionStatus.PROTECTED,
@@ -99,9 +120,14 @@ export class DatabaseService {
       activeConnections: testRes.activeConnections,
       walEnabled: testRes.walEnabled ?? false,
       walStatus: testRes.walStatus || 'unknown',
-      recoveryReadiness: testRes.walEnabled
-        ? DatabaseRecoveryReadiness.READY
-        : DatabaseRecoveryReadiness.DEGRADED,
+      recoveryReadiness:
+        dto.type === DatabaseType.REDIS
+          ? testRes.success
+            ? DatabaseRecoveryReadiness.READY
+            : DatabaseRecoveryReadiness.DEGRADED
+          : testRes.walEnabled
+          ? DatabaseRecoveryReadiness.READY
+          : DatabaseRecoveryReadiness.DEGRADED,
     });
 
     return this.databaseRepo.save(db);
@@ -120,13 +146,22 @@ export class DatabaseService {
       }
     }
 
-    const testRes = await this.pgProvider.testConnection({
-      host: db.host,
-      port: db.port,
-      database: db.databaseName,
-      user: db.username || 'postgres',
-      password,
-    });
+    const testRes =
+      db.type === DatabaseType.REDIS || db.port === 6379
+        ? await this.redisProvider.testConnection({
+            host: db.host,
+            port: db.port || 6379,
+            database: db.databaseName || '0',
+            user: db.username || 'default',
+            password,
+          })
+        : await this.pgProvider.testConnection({
+            host: db.host,
+            port: db.port,
+            database: db.databaseName,
+            user: db.username || 'postgres',
+            password,
+          });
 
     // Update database record with fresh stats
     db.status = testRes.success ? DatabaseStatus.CONNECTED : DatabaseStatus.UNREACHABLE;
@@ -136,9 +171,14 @@ export class DatabaseService {
     if (testRes.activeConnections !== undefined) db.activeConnections = testRes.activeConnections;
     if (testRes.walEnabled !== undefined) db.walEnabled = testRes.walEnabled;
     if (testRes.walStatus) db.walStatus = testRes.walStatus;
-    db.recoveryReadiness = testRes.walEnabled
-      ? DatabaseRecoveryReadiness.READY
-      : DatabaseRecoveryReadiness.DEGRADED;
+    db.recoveryReadiness =
+      db.type === DatabaseType.REDIS
+        ? testRes.success
+          ? DatabaseRecoveryReadiness.READY
+          : DatabaseRecoveryReadiness.DEGRADED
+        : testRes.walEnabled
+        ? DatabaseRecoveryReadiness.READY
+        : DatabaseRecoveryReadiness.DEGRADED;
 
     await this.databaseRepo.save(db);
     return testRes;

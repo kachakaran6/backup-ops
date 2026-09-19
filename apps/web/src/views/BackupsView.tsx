@@ -129,37 +129,26 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
   return (
     <div className="space-y-4">
       {/* Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Backup History &amp; Lineages
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            Deterministic recovery lineages with Base snapshot anchors, incremental delta blocks, and Point-In-Time Recovery (PITR) WAL segments.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={onRefresh}
-            className="op-btn-secondary"
-            title="Refresh Backups"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            onClick={() => {
-              if (databases.length > 0 && !selectedDbId) setSelectedDbId(databases[0].id);
-              if (storageDestinations.length > 0 && !selectedStorageId) setSelectedStorageId(storageDestinations[0].id);
-              setShowTriggerModal(true);
-            }}
-            className="op-btn-primary"
-          >
-            <Play className="w-3.5 h-3.5" />
-            <span>Trigger Backup Job</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary"
+          title="Refresh Backups"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <button
+          onClick={() => {
+            if (databases.length > 0 && !selectedDbId) setSelectedDbId(databases[0].id);
+            if (storageDestinations.length > 0 && !selectedStorageId) setSelectedStorageId(storageDestinations[0].id);
+            setShowTriggerModal(true);
+          }}
+          className="op-btn-primary"
+        >
+          <Play className="w-3.5 h-3.5" />
+          <span>Trigger Backup Job</span>
+        </button>
       </div>
 
       {/* Operational Stats Strip */}

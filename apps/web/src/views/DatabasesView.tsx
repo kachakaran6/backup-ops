@@ -95,7 +95,7 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
 
   const protectedCount = databases.filter((d) => d.protectionStatus === 'protected').length;
   const pitrCount = databases.filter((d) => d.walEnabled).length;
-  const degradedCount = databases.filter((d) => d.status !== 'connected').length;
+  const degradedCount = databases.filter((d) => d.status === 'unreachable' || d.recoveryReadiness === 'unhealthy').length;
 
   const filteredDatabases = useMemo(() => {
     return databases.filter((db) => {
@@ -118,33 +118,22 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Database Workloads
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            PostgreSQL, MySQL, MariaDB, and Redis instances configured for logical dumps and continuous Base + WAL archiving.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={onRefresh}
-            className="op-btn-secondary"
-            title="Refresh Databases"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="op-btn-primary"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Connect Database</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary"
+          title="Refresh Databases"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="op-btn-primary"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Connect Database</span>
+        </button>
       </div>
 
       {/* Operational Stats Strip */}
@@ -307,7 +296,15 @@ export const DatabasesView: React.FC<DatabasesViewProps> = ({
                       </td>
                       <td>
                         <StatusBadge
-                          status={db.status === 'connected' ? 'HEALTHY' : 'FAILED'}
+                          status={
+                            db.status === 'connected'
+                              ? 'HEALTHY'
+                              : db.status === 'unreachable'
+                              ? 'FAILED'
+                              : db.status === 'disconnected'
+                              ? 'OFFLINE'
+                              : 'UNKNOWN'
+                          }
                           size="sm"
                         />
                       </td>

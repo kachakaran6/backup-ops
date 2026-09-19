@@ -62,6 +62,35 @@ export class CredentialService {
     return this.sanitize(cred);
   }
 
+  async update(
+    organizationId: string,
+    id: string,
+    dto: { name?: string; secretPayload?: Record<string, any>; metadata?: Record<string, any> },
+  ): Promise<Omit<Credential, 'ciphertext' | 'iv' | 'authTag'>> {
+    const cred = await this.credentialRepo.findOne({ where: { id, organizationId } });
+    if (!cred) {
+      throw new NotFoundException(`Credential ${id} not found`);
+    }
+
+    if (dto.name) cred.name = dto.name;
+    if (dto.metadata) cred.metadata = dto.metadata;
+
+    if (dto.secretPayload) {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
+      let ciphertext = cipher.update(JSON.stringify(dto.secretPayload), 'utf8', 'hex');
+      ciphertext += cipher.final('hex');
+      const authTag = cipher.getAuthTag().toString('hex');
+
+      cred.ciphertext = ciphertext;
+      cred.iv = iv.toString('hex');
+      cred.authTag = authTag;
+    }
+
+    const saved = await this.credentialRepo.save(cred);
+    return this.sanitize(saved);
+  }
+
   /**
    * Internal decrypt method for providers, connection testers, and workers only.
    * NEVER exposed directly to public HTTP responses.

@@ -17,6 +17,8 @@ import {
   DatabaseStatus,
   DatabaseType,
 } from '../database/entities/database.entity';
+import { CredentialService } from '../credential/credential.service';
+import { CredentialType } from '../credential/entities/credential.entity';
 
 @Injectable()
 export class CoolifyService {
@@ -32,6 +34,7 @@ export class CoolifyService {
     private databaseRepo: Repository<Database>,
     private coolifyProvider: CoolifyProvider,
     private configService: ConfigService,
+    private credentialService: CredentialService,
   ) {
     const rawKey = this.configService.get<string>(
       'BACKUP_OPS_ENCRYPTION_KEY',
@@ -175,44 +178,11 @@ export class CoolifyService {
         const resources = await this.coolifyProvider.listServerResources(conn.url, token, cs.uuid);
         for (const res of resources) {
           const type = (res.type || '').toLowerCase();
-          if (type.includes('database') || type.includes('postgres') || type.includes('mysql') || type.includes('mariadb')) {
+          if (type.includes('database') || type.includes('postgres') || type.includes('mysql') || type.includes('mariadb') || type.includes('redis')) {
             processedDbUuids.add(res.uuid);
-            let dbType = DatabaseType.POSTGRES;
-            if (type.includes('mysql')) dbType = DatabaseType.MYSQL;
-            if (type.includes('mariadb')) dbType = DatabaseType.MARIADB;
-            if (type.includes('mongo')) dbType = DatabaseType.MONGODB;
-            if (type.includes('redis')) dbType = DatabaseType.REDIS;
-
-            let db = await this.databaseRepo.findOne({
-              where: {
-                organizationId,
-                coolifyConnectionId: conn.id,
-                coolifyResourceUuid: res.uuid,
-              },
-            });
-
-            if (!db) {
-              db = this.databaseRepo.create({
-                organizationId,
-                serverId: server.id,
-                coolifyConnectionId: conn.id,
-                coolifyResourceUuid: res.uuid,
-                name: res.name || `Coolify ${dbType} ${res.uuid.slice(0, 8)}`,
-                type: dbType,
-                host: server.host,
-                port: dbType === DatabaseType.POSTGRES ? 5432 : dbType === DatabaseType.MYSQL ? 3306 : 6379,
-                databaseName: res.database_name || 'postgres',
-                status: res.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN,
-                protectionStatus: DatabaseProtectionStatus.DISCOVERED,
-                recoveryReadiness: DatabaseRecoveryReadiness.UNKNOWN,
-                metadata: res,
-              });
-            } else {
-              db.serverId = server.id;
-              db.host = server.host;
-              db.status = res.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN;
-            }
-            await this.databaseRepo.save(db);
+            // Fetch detailed database object if possible
+            const fullDb = await this.coolifyProvider.getDatabase(conn.url, token, res.uuid);
+            await this.reconcileCoolifyDatabase(organizationId, conn, fullDb || res, server);
           } else if (type.includes('application') || type.includes('app')) {
             applicationsCount++;
           } else {
@@ -228,41 +198,7 @@ export class CoolifyService {
           continue; // Already reconciled via server resource
         }
         processedDbUuids.add(gdb.uuid);
-
-        const type = (gdb.type || '').toLowerCase();
-        let dbType = DatabaseType.POSTGRES;
-        if (type.includes('mysql')) dbType = DatabaseType.MYSQL;
-        if (type.includes('mariadb')) dbType = DatabaseType.MARIADB;
-        if (type.includes('mongo')) dbType = DatabaseType.MONGODB;
-        if (type.includes('redis')) dbType = DatabaseType.REDIS;
-
-        let db = await this.databaseRepo.findOne({
-          where: {
-            organizationId,
-            coolifyConnectionId: conn.id,
-            coolifyResourceUuid: gdb.uuid,
-          },
-        });
-
-        if (!db) {
-          db = this.databaseRepo.create({
-            organizationId,
-            coolifyConnectionId: conn.id,
-            coolifyResourceUuid: gdb.uuid,
-            name: gdb.name || `Coolify ${dbType} (${gdb.uuid.slice(0, 8)})`,
-            type: dbType,
-            host: gdb.server?.ip || '127.0.0.1',
-            port: dbType === DatabaseType.POSTGRES ? 5432 : dbType === DatabaseType.MYSQL ? 3306 : 6379,
-            databaseName: gdb.database_name || 'postgres',
-            status: gdb.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN,
-            protectionStatus: DatabaseProtectionStatus.DISCOVERED,
-            recoveryReadiness: DatabaseRecoveryReadiness.UNKNOWN,
-            metadata: gdb,
-          });
-        } else {
-          db.status = gdb.status === 'running' ? DatabaseStatus.CONNECTED : DatabaseStatus.UNKNOWN;
-        }
-        await this.databaseRepo.save(db);
+        await this.reconcileCoolifyDatabase(organizationId, conn, gdb);
       }
 
       // 3. Update connection stats accurately from durable database records
@@ -297,6 +233,142 @@ export class CoolifyService {
   async remove(organizationId: string, id: string): Promise<void> {
     const conn = await this.findOne(organizationId, id);
     await this.coolifyRepo.remove(conn);
+  }
+
+  private async reconcileCoolifyDatabase(
+    organizationId: string,
+    conn: CoolifyConnection,
+    gdb: any,
+    defaultServer?: Server,
+  ): Promise<Database> {
+    const rawType = (gdb.database_type || gdb.type || '').toLowerCase();
+    const rawImage = (gdb.image || '').toLowerCase();
+    const rawName = (gdb.name || '').toLowerCase();
+    const rawUrl = (gdb.external_db_url || gdb.internal_db_url || '').toLowerCase();
+
+    let dbType = DatabaseType.POSTGRES;
+    if (rawType.includes('redis') || rawImage.includes('redis') || rawName.includes('redis') || rawUrl.startsWith('redis://')) {
+      dbType = DatabaseType.REDIS;
+    } else if (rawType.includes('mysql') || rawImage.includes('mysql') || rawName.includes('mysql') || rawUrl.startsWith('mysql://')) {
+      dbType = DatabaseType.MYSQL;
+    } else if (rawType.includes('mariadb') || rawImage.includes('mariadb') || rawName.includes('mariadb') || rawUrl.startsWith('mariadb://')) {
+      dbType = DatabaseType.MARIADB;
+    } else if (rawType.includes('mongo') || rawImage.includes('mongo') || rawName.includes('mongo') || rawUrl.startsWith('mongodb://')) {
+      dbType = DatabaseType.MONGODB;
+    }
+
+    // Determine host, port, credentials
+    let username = gdb.postgres_user || (dbType === DatabaseType.REDIS ? 'default' : 'postgres');
+    let password = gdb.postgres_password || gdb.redis_password || gdb.mysql_password || gdb.mariadb_password || undefined;
+    let dbName = gdb.postgres_db || gdb.database_name || (dbType === DatabaseType.REDIS ? '0' : 'postgres');
+    let port = gdb.public_port ? Number(gdb.public_port) : (dbType === DatabaseType.REDIS ? 6379 : 5432);
+    let host = gdb.destination?.server?.ip || gdb.server?.ip || defaultServer?.host || '127.0.0.1';
+
+    // Parse external_db_url or internal_db_url if present
+    const dbUrlToParse = gdb.external_db_url || gdb.internal_db_url;
+    if (dbUrlToParse) {
+      try {
+        const parsed = new URL(dbUrlToParse);
+        if (parsed.username) username = decodeURIComponent(parsed.username);
+        if (parsed.password) password = decodeURIComponent(parsed.password);
+        if (parsed.pathname && parsed.pathname !== '/') {
+          dbName = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+        }
+        if (gdb.external_db_url && parsed.hostname && !parsed.hostname.includes('.internal')) {
+          host = parsed.hostname;
+        }
+        if (parsed.port) {
+          port = Number(parsed.port);
+        }
+      } catch (err: any) {
+        this.logger.debug(`Could not parse database URL for ${gdb.name}: ${err.message}`);
+      }
+    }
+
+    if (gdb.public_port) {
+      port = Number(gdb.public_port);
+    }
+
+    // Save or update credentials in CredentialService
+    let credentialId: string | undefined = undefined;
+    if (password) {
+      try {
+        const credName = `Coolify DB Credentials - ${gdb.name || gdb.uuid}`;
+        const existingCreds = await this.credentialService.findAll(organizationId);
+        const existingCred = existingCreds.find((c) => c.name === credName);
+        if (existingCred) {
+          await this.credentialService.update(organizationId, existingCred.id, {
+            secretPayload: { username, password },
+          });
+          credentialId = existingCred.id;
+        } else {
+          const newCred = await this.credentialService.create(organizationId, {
+            name: credName,
+            type: CredentialType.DATABASE_PASSWORD,
+            secretPayload: { username, password },
+          });
+          credentialId = newCred.id;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not save credentials for database ${gdb.name}: ${err.message}`);
+      }
+    }
+
+    // Determine status from Coolify telemetry
+    const rawStatus = (gdb.status || '').toLowerCase();
+    let status = DatabaseStatus.UNKNOWN;
+    if (rawStatus.includes('running') || rawStatus.includes('healthy')) {
+      status = DatabaseStatus.CONNECTED;
+    } else if (rawStatus.includes('exited') || rawStatus.includes('stopped')) {
+      status = DatabaseStatus.DISCONNECTED;
+    }
+
+    // Find or create Database entity
+    let db = await this.databaseRepo.findOne({
+      where: {
+        organizationId,
+        coolifyConnectionId: conn.id,
+        coolifyResourceUuid: gdb.uuid,
+      },
+    });
+
+    const serverUuid = gdb.destination?.server?.uuid || gdb.server?.uuid || defaultServer?.coolifyServerUuid;
+    let serverRecord = serverUuid
+      ? await this.serverRepo.findOne({ where: { organizationId, coolifyServerUuid: serverUuid } })
+      : defaultServer;
+
+    if (!db) {
+      db = this.databaseRepo.create({
+        organizationId,
+        serverId: serverRecord?.id,
+        coolifyConnectionId: conn.id,
+        coolifyResourceUuid: gdb.uuid,
+        name: gdb.name || `Coolify ${dbType} (${gdb.uuid.slice(0, 8)})`,
+        type: dbType,
+        host,
+        port,
+        username,
+        databaseName: dbName,
+        credentialId,
+        status,
+        protectionStatus: DatabaseProtectionStatus.DISCOVERED,
+        recoveryReadiness: DatabaseRecoveryReadiness.READY,
+        metadata: gdb,
+      });
+    } else {
+      db.name = gdb.name || db.name;
+      db.type = dbType;
+      db.host = host;
+      db.port = port;
+      db.username = username;
+      db.databaseName = dbName;
+      if (credentialId) db.credentialId = credentialId;
+      db.status = status;
+      if (serverRecord) db.serverId = serverRecord.id;
+      db.metadata = gdb;
+    }
+
+    return this.databaseRepo.save(db);
   }
 
   private decryptToken(ciphertext: string, ivHex: string, authTagHex: string): string {

@@ -48,95 +48,44 @@ export const AppLayout: React.FC = () => {
     const path = location.pathname;
 
     if (path.startsWith('/infrastructure/servers/')) {
-      return {
-        title: 'Server Telemetry & Workloads',
-        subtitle: 'Hardware gauges, Docker container instances, and detected databases',
-      };
+      return { title: 'Server Details' };
     }
     if (path.startsWith('/databases/')) {
-      return {
-        title: 'Database Protection & PITR',
-        subtitle: 'Point-In-Time Recovery readiness, WAL archiving status, and backup history',
-      };
+      return { title: 'Database Details' };
     }
 
     switch (path) {
       case '/overview':
       case '/':
-        return {
-          title: 'Operations Overview',
-          subtitle: 'System health strip, active job throughput, and recovery readiness',
-        };
+        return { title: 'Overview' };
       case '/infrastructure/coolify':
-        return {
-          title: 'Coolify Infrastructure',
-          subtitle: 'Read-only synchronized inventory of servers, applications, and managed databases',
-        };
+        return { title: 'Coolify' };
       case '/infrastructure/servers':
-        return {
-          title: 'Infrastructure Servers',
-          subtitle: 'Coolify-discovered nodes and SSH-managed Linux host catalog',
-        };
+        return { title: 'Servers' };
       case '/infrastructure/docker':
-        return {
-          title: 'Docker & Storage Volumes',
-          subtitle: 'Host container daemons and distinction between volume snapshots and database dumps',
-        };
+        return { title: 'Docker Volumes' };
       case '/databases':
-        return {
-          title: 'Database Catalog',
-          subtitle: 'PostgreSQL Base+WAL, MySQL, and MariaDB engines with live connection telemetry',
-        };
+        return { title: 'Databases' };
       case '/storage':
-        return {
-          title: 'Storage Destinations',
-          subtitle: 'Local volume mounts, AWS S3, MinIO, and S3-compatible endpoints',
-        };
+        return { title: 'Storage' };
       case '/backups':
-        return {
-          title: 'Backups & Recovery Chains',
-          subtitle: 'Policy schedules, streaming SHA-256 verification badges, and artifact lineage',
-        };
+        return { title: 'Backups' };
       case '/restore':
-        return {
-          title: 'Disaster Recovery & Restore',
-          subtitle: 'Target redirection, point-in-time recovery, and confirmation-protected rollback',
-        };
+        return { title: 'Restore' };
       case '/operations':
-        return {
-          title: 'Operations & Worker Jobs',
-          subtitle: 'Asynchronous task state machine, transfer throughput, and live terminal logs',
-        };
+        return { title: 'Operations' };
       case '/monitoring':
-        return {
-          title: 'Platform Observability',
-          subtitle: 'Service health, database RPO freshness, and recovery chain validation',
-        };
+        return { title: 'Monitoring' };
       case '/notifications':
-        return {
-          title: 'Notifications & Alert Channels',
-          subtitle: 'SMTP Email, Telegram Bot, Pushover, and Gotify incident dispatch rules',
-        };
+        return { title: 'Notifications' };
       case '/vault':
-        return {
-          title: 'Encrypted Credential Vault',
-          subtitle: 'AES-256-GCM zero-leak secret storage for SSH keys, tokens, and database credentials',
-        };
+        return { title: 'Credentials Vault' };
       case '/audit':
-        return {
-          title: 'Audit Trail',
-          subtitle: 'Immutable compliance logging of administrative, data movement, and destructive activities',
-        };
+        return { title: 'Audit Logs' };
       case '/settings':
-        return {
-          title: 'Workspace Settings',
-          subtitle: 'Control plane preferences, admin credentials management, and platform info',
-        };
+        return { title: 'Settings' };
       default:
-        return {
-          title: 'BackupOps Control Plane',
-          subtitle: 'Infrastructure data operations and recovery orchestration',
-        };
+        return { title: 'BackupOps' };
     }
   };
 
@@ -169,7 +118,6 @@ export const AppLayout: React.FC = () => {
         {/* Top Header */}
         <Header
           title={headerInfo.title}
-          subtitle={headerInfo.subtitle}
           onRefresh={refresh}
           isRefreshing={isRefreshing}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}

@@ -186,18 +186,8 @@ export const NotificationsView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 op-card p-4 sm:p-5">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
-            <Bell className="w-4 h-4 text-accent" />
-            Alert Channels & Real-Time Incident Routing
-          </h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            Configure SMTP Email, Telegram Bot, Pushover, and self-hosted Gotify channels with AES-256 encrypted credentials.
-          </p>
-        </div>
-
+      {/* Top Action Bar */}
+      <div className="flex items-center justify-end pb-1">
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => openCreateModal('telegram')}

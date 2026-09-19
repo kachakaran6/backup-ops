@@ -7,8 +7,10 @@ import { CoolifyController } from './coolify.controller';
 import { Server } from '../server/entities/server.entity';
 import { Database } from '../database/entities/database.entity';
 
+import { CredentialModule } from '../credential/credential.module';
+
 @Module({
-  imports: [TypeOrmModule.forFeature([CoolifyConnection, Server, Database])],
+  imports: [TypeOrmModule.forFeature([CoolifyConnection, Server, Database]), CredentialModule],
   controllers: [CoolifyController],
   providers: [CoolifyProvider, CoolifyService],
   exports: [CoolifyService, CoolifyProvider],

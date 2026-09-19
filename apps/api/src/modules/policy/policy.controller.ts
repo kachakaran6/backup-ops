@@ -56,6 +56,16 @@ export class PolicyController {
     return this.policyService.toggle(organizationId, id);
   }
 
+  @Post(':id/trigger')
+  @ApiOperation({ summary: 'Trigger immediate execution of a policy' })
+  @ApiQuery({ name: 'organizationId', required: true })
+  async trigger(
+    @Param('id') id: string,
+    @Query('organizationId') organizationId: string,
+  ) {
+    return this.policyService.trigger(organizationId, id);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a policy' })
   @ApiQuery({ name: 'organizationId', required: true })

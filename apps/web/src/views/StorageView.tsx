@@ -123,33 +123,22 @@ export const StorageView: React.FC<StorageViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Storage Pools &amp; Targets
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            Encrypted target endpoints for logical database dumps, physical Base snapshots, and continuous WAL segments.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={onRefresh}
-            className="op-btn-secondary"
-            title="Refresh Storage"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="op-btn-primary"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Storage Target</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary"
+          title="Refresh Storage"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="op-btn-primary"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Storage Target</span>
+        </button>
       </div>
 
       {/* Operational Stats Strip */}

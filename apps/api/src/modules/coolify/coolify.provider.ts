@@ -175,6 +175,13 @@ export class CoolifyProvider {
   }
 
   /**
+   * Get detailed configuration for a specific database (including connection URLs and credentials).
+   */
+  async getDatabase(url: string, token: string, uuid: string): Promise<CoolifyDatabase | null> {
+    return this.apiGet<CoolifyDatabase>(url, token, `/api/v1/databases/${uuid}`);
+  }
+
+  /**
    * List all services across the Coolify instance.
    */
   async listServices(url: string, token: string): Promise<CoolifyService[]> {

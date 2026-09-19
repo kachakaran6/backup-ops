@@ -19,6 +19,8 @@ RUN pnpm --filter backup-ops-worker deploy --legacy --prod /prod/worker
 # ---- Production stage ----
 FROM node:22-alpine AS production
 
+RUN apk add --no-cache postgresql16-client redis mariadb-client
+
 WORKDIR /app
 
 COPY --from=builder /prod/worker ./

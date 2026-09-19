@@ -87,27 +87,11 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Breadcrumb path */}
+        {/* Page Title / Clean Breadcrumb */}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs">
-            <Link
-              to="/overview"
-              className="text-text-muted hover:text-text-primary transition-colors font-mono hidden sm:inline"
-            >
-              Control Plane
-            </Link>
-            {breadcrumbs.length > 0 && (
-              <ChevronRight className="w-3 h-3 text-text-muted shrink-0 hidden sm:inline" />
-            )}
-            <h1 className="text-xs sm:text-sm font-semibold text-text-primary truncate">
-              {title}
-            </h1>
-          </div>
-          {subtitle && (
-            <p className="text-[11px] text-text-muted truncate hidden xl:block">
-              {subtitle}
-            </p>
-          )}
+          <h1 className="text-sm font-semibold text-text-primary tracking-tight truncate">
+            {title}
+          </h1>
         </div>
       </div>
 

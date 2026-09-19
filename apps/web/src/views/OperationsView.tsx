@@ -93,27 +93,16 @@ export const OperationsView: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Operations &amp; Queue Telemetry
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            Distributed worker queues orchestrating asynchronous database streams, hashing, and restore routines.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={loadJobs}
-            disabled={loading}
-            className="op-btn-secondary"
-            title="Refresh Operations"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-brand-primary' : 'text-text-muted'}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={loadJobs}
+          disabled={loading}
+          className="op-btn-secondary"
+          title="Refresh Operations"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-brand-primary' : 'text-text-muted'}`} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
       </div>
 
       {/* Operational Stats Strip */}

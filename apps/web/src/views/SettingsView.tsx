@@ -81,21 +81,12 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Settings &amp; Preferences
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            Operator profile, custom color palettes, display modes, and runtime diagnostics.
-          </p>
-        </div>
-
+      {/* Header */}
+      <div className="flex items-center justify-end gap-2 pb-1">
         <button
           onClick={refresh}
           disabled={isRefreshing}
-          className="op-btn-secondary self-start sm:self-auto"
+          className="op-btn-secondary"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-brand-primary' : 'text-text-muted'}`} />
           <span>Refresh Telemetry</span>

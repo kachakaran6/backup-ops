@@ -122,42 +122,26 @@ export const RestoreView: React.FC<RestoreViewProps> = (props) => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight">
-              Disaster Recovery &amp; State Restores
-            </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-secondary border border-border text-text-muted">
-              {restoreJobs.length} executions
-            </span>
-          </div>
-          <p className="text-xs text-text-muted mt-0.5">
-            Deterministic reconstruction from verified Base snapshots, sequential incremental deltas, and point-in-time recovery logs.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={onRefresh}
-            className="op-btn-secondary"
-            title="Refresh Restores"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            onClick={() => {
-              if (backups.length > 0 && !selectedBackupId) setSelectedBackupId(backups[0].id);
-              setShowModal(true);
-            }}
-            disabled={backups.length === 0}
-            className="op-btn-primary disabled:opacity-50"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Launch Restore</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary"
+          title="Refresh Restores"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <button
+          onClick={() => {
+            if (backups.length > 0 && !selectedBackupId) setSelectedBackupId(backups[0].id);
+            setShowModal(true);
+          }}
+          disabled={backups.length === 0}
+          className="op-btn-primary disabled:opacity-50"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Initiate Restore</span>
+        </button>
       </div>
 
       {/* Restore Executions History */}

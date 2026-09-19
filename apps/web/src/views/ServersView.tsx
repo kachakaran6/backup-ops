@@ -109,33 +109,22 @@ export const ServersView: React.FC<ServersViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Top Operational Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-        <div>
-          <h1 className="text-base font-semibold text-text-primary tracking-tight">
-            Infrastructure Servers
-          </h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            Physical, virtual, and cloud nodes connected via Direct SSH or imported from Coolify.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={onRefresh}
-            className="op-btn-secondary"
-            title="Refresh Server Fleet"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="op-btn-primary"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Server (SSH)</span>
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2 pb-1">
+        <button
+          onClick={onRefresh}
+          className="op-btn-secondary"
+          title="Refresh Server Fleet"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="op-btn-primary"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Server (SSH)</span>
+        </button>
       </div>
 
       {/* Health Strip */}
