@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job, JobState } from './entities/job.entity';
@@ -8,6 +8,8 @@ import { Server } from '../server/entities/server.entity';
 
 @Injectable()
 export class JobService {
+  private readonly logger = new Logger(JobService.name);
+
   constructor(
     @InjectRepository(Job)
     private jobRepo: Repository<Job>,
@@ -109,10 +111,15 @@ export class JobService {
   }
 
   async findAll(organizationId: string): Promise<Job[]> {
-    return this.jobRepo.find({
-      where: { organizationId },
-      order: { createdAt: 'DESC' },
-    });
+    try {
+      return await this.jobRepo.find({
+        where: { organizationId },
+        order: { createdAt: 'DESC' },
+      });
+    } catch (err: any) {
+      this.logger.error(`Error querying jobs for organization ${organizationId}: ${err.message}`, err.stack);
+      return [];
+    }
   }
 
   async findOne(organizationId: string, id: string): Promise<Job> {
