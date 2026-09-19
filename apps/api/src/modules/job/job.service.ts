@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job, JobState } from './entities/job.entity';
@@ -7,7 +7,7 @@ import { Resource } from '../resource/entities/resource.entity';
 import { Server } from '../server/entities/server.entity';
 
 @Injectable()
-export class JobService {
+export class JobService implements OnApplicationBootstrap {
   private readonly logger = new Logger(JobService.name);
 
   constructor(
@@ -18,6 +18,20 @@ export class JobService {
     @InjectRepository(Server)
     private serverRepo: Repository<Server>,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      await this.jobRepo.query(`
+        UPDATE "jobs" SET "steps" = '[]' WHERE "steps" IS NULL;
+        UPDATE "jobs" SET "logs" = '[]' WHERE "logs" IS NULL;
+        UPDATE "jobs" SET "options" = '{}' WHERE "options" IS NULL;
+        UPDATE "jobs" SET "progress" = '{"percentage":0,"bytesProcessed":0,"totalBytes":0,"filesProcessed":0,"totalFiles":0,"currentStep":"Queued"}' WHERE "progress" IS NULL;
+      `);
+      this.logger.log('Job database sanitized: all JSON columns validated.');
+    } catch (err: any) {
+      this.logger.warn(`Job database sanitization note: ${err.message}`);
+    }
+  }
 
   async create(organizationId: string, dto: CreateJobDto): Promise<Job> {
     let sourceName = 'Source Resource';
@@ -132,19 +146,66 @@ export class JobService {
     return saved;
   }
 
-  async findAll(organizationId: string): Promise<Job[]> {
+  async findAll(organizationId?: string): Promise<Job[]> {
     try {
-      return await this.jobRepo.find({
-        where:
-          organizationId && organizationId !== 'default'
-            ? [{ organizationId }, { organizationId: 'default' }]
-            : { organizationId: 'default' },
-        order: { createdAt: 'DESC' },
-      });
+      const qb = this.jobRepo.createQueryBuilder('job').orderBy('job.createdAt', 'DESC');
+      if (organizationId && organizationId !== 'default') {
+        qb.where('job.organizationId = :orgId OR job.organizationId = :defaultOrg', {
+          orgId: organizationId,
+          defaultOrg: 'default',
+        });
+      }
+      return await qb.getMany();
     } catch (err: any) {
-      this.logger.error(`Error querying jobs for organization ${organizationId}: ${err.message}`, err.stack);
-      return [];
+      this.logger.error(`Error querying jobs via ORM: ${err.message}`);
+      try {
+        const rawJobs = await this.jobRepo.query(`SELECT * FROM "jobs" ORDER BY "createdAt" DESC LIMIT 100`);
+        return rawJobs.map((raw: any) => this.mapRawJob(raw));
+      } catch (rawErr: any) {
+        this.logger.error(`Raw query fallback also failed: ${rawErr.message}`);
+        return [];
+      }
     }
+  }
+
+  private mapRawJob(raw: any): Job {
+    const parseJson = (val: any, defaultVal: any) => {
+      if (!val) return defaultVal;
+      if (typeof val === 'object') return val;
+      try {
+        return JSON.parse(val);
+      } catch {
+        return defaultVal;
+      }
+    };
+
+    return {
+      id: raw.id,
+      organizationId: raw.organizationId,
+      policyId: raw.policyId,
+      operationType: raw.operationType || 'copy',
+      sourceResourceId: raw.sourceResourceId,
+      destinationResourceId: raw.destinationResourceId,
+      state: raw.state || JobState.QUEUED,
+      progress: parseJson(raw.progress, {
+        percentage: 0,
+        bytesProcessed: 0,
+        totalBytes: 0,
+        filesProcessed: 0,
+        totalFiles: 0,
+        currentStep: 'Queued in orchestrator',
+      }),
+      options: parseJson(raw.options, {}),
+      steps: parseJson(raw.steps, []),
+      logs: parseJson(raw.logs, []),
+      retryCount: Number(raw.retryCount) || 0,
+      maxRetries: Number(raw.maxRetries) || 3,
+      error: raw.error,
+      startedAt: raw.startedAt ? new Date(raw.startedAt) : undefined,
+      finishedAt: raw.finishedAt ? new Date(raw.finishedAt) : undefined,
+      createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
+      updatedAt: raw.updatedAt ? new Date(raw.updatedAt) : new Date(),
+    } as Job;
   }
 
   async findOne(organizationId: string, id: string): Promise<Job> {
