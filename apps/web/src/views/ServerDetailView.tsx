@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Activity,
   Database,
-  Container,
   HardDrive,
   ShieldCheck,
   FileText,
@@ -13,13 +12,19 @@ import {
   Clock,
   Terminal,
   ChevronRight,
-  ExternalLink,
+  ArrowRight,
+  ArrowUpDown,
+  Settings as SettingsIcon,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  Play,
 } from 'lucide-react';
-import { Server, Database as DatabaseType } from '../types';
+import { Server, Database as DatabaseType, Backup } from '../types';
 import * as api from '../services/api';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { LogViewer } from '../components/common/LogViewer';
 import { EmptyState } from '../components/common/EmptyState';
+import { useControlPlane } from '../context/ControlPlaneContext';
 
 interface ServerDetailViewProps {
   server: Server;
@@ -27,23 +32,22 @@ interface ServerDetailViewProps {
   onSelectDatabase: (db: DatabaseType) => void;
 }
 
-type TabType = 'overview' | 'databases' | 'docker' | 'backups' | 'logs';
+type TabType = 'overview' | 'backups' | 'transfers' | 'databases' | 'settings';
 
 export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   server,
   onBack,
   onSelectDatabase,
 }) => {
+  const { backups, storageDestinations } = useControlPlane();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [databases, setDatabases] = useState<DatabaseType[]>([]);
-  const [dockerData, setDockerData] = useState<{
-    installed: boolean;
-    running: boolean;
-    version?: string;
-    containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
-    volumes: Array<{ name: string; driver: string }>;
-  } | null>(null);
+  const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Settings tab state
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; latencyMs?: number; message?: string } | null>(null);
 
   useEffect(() => {
     loadServerData();
@@ -52,12 +56,16 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
   const loadServerData = async () => {
     setLoading(true);
     try {
-      const [dbs, docker] = await Promise.all([
+      const [dbs, allTransfers] = await Promise.all([
         api.fetchServerDatabases(server.id),
-        api.fetchServerDocker(server.id),
+        api.fetchTransfers(),
       ]);
       setDatabases(dbs);
-      setDockerData(docker);
+      // Filter transfers where this server is source or destination
+      const serverTransfers = allTransfers.filter(
+        (t: any) => t.sourceServerId === server.id || t.destinationServerId === server.id
+      );
+      setTransfers(serverTransfers);
     } catch (err) {
       console.error('Failed to load server details:', err);
     } finally {
@@ -65,41 +73,42 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
     }
   };
 
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      const res = await api.testSshServer({
+        host: server.host,
+        port: server.port,
+        username: server.username || 'ubuntu',
+      });
+      setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message || 'Connection test failed' });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  };
+
+  // Backups associated with this server's databases
+  const serverBackups = backups.filter((b) =>
+    databases.some((db) => db.id === b.sourceDatabaseId)
+  );
+
   const statusMap: Record<string, any> = {
     online: 'HEALTHY',
     degraded: 'DEGRADED',
     offline: 'OFFLINE',
     unknown: 'UNKNOWN',
   };
-
-  const sampleServerLogs = [
-    {
-      timestamp: new Date().toISOString(),
-      level: 'info' as const,
-      component: 'SSHProbe',
-      message: `Direct SSH session verified for host ${server.host}:${server.port} (${server.username || 'ubuntu'}).`,
-    },
-    {
-      timestamp: new Date(Date.now() - 60000).toISOString(),
-      level: 'info' as const,
-      component: 'HostCollector',
-      message: `System specs collected: OS ${server.os || 'Linux'}, Kernel ${server.kernel || 'Standard Linux'}, Arch ${server.arch || 'x86_64'}.`,
-    },
-    {
-      timestamp: new Date(Date.now() - 120000).toISOString(),
-      level: server.dockerInstalled ? ('info' as const) : ('warn' as const),
-      component: 'DockerDaemon',
-      message: server.dockerInstalled
-        ? `Docker daemon communication established (${dockerData?.version || 'Engine active'}).`
-        : `Docker daemon socket not found or not running on host.`,
-    },
-    {
-      timestamp: new Date(Date.now() - 300000).toISOString(),
-      level: 'info' as const,
-      component: 'Heartbeat',
-      message: `Host heartbeat acknowledged. Latency acceptable.`,
-    },
-  ];
 
   return (
     <div className="space-y-4">
@@ -133,7 +142,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
             disabled={loading}
             className="op-btn-secondary"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-accent' : 'text-text-muted'}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-brand-primary' : 'text-text-muted'}`} />
             <span className="hidden sm:inline">Refresh Host</span>
           </button>
         </div>
@@ -160,7 +169,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
             <Cpu className="w-3.5 h-3.5" />
           </div>
           <div className="text-xs font-semibold text-text-primary font-mono">
-            {server.cpuCores ? `${server.cpuCores} Cores Allocated` : 'SSH Monitored Host'}
+            {server.cpuCores ? `${server.cpuCores} Cores Allocated` : 'SSH Direct Probe'}
           </div>
           <div className="text-[10px] font-mono text-text-muted">
             {server.kernel || 'Direct OS probe'}
@@ -169,21 +178,14 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
 
         <div className="op-card p-3 space-y-1">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[10px] uppercase font-medium tracking-wider">DOCKER ENGINE</span>
-            <Container className="w-3.5 h-3.5" />
+            <span className="text-[10px] uppercase font-medium tracking-wider">DATABASES HOSTED</span>
+            <Database className="w-3.5 h-3.5" />
           </div>
-          <div className="text-xs font-semibold font-mono flex items-center gap-1.5">
-            {server.dockerInstalled ? (
-              <span className="text-success flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
-                Active Daemon
-              </span>
-            ) : (
-              <span className="text-text-muted">Not Detected</span>
-            )}
+          <div className="text-xs font-semibold font-mono text-text-primary">
+            {databases.length} Database Workloads
           </div>
-          <div className="text-[10px] font-mono text-text-muted truncate">
-            {dockerData?.containers ? `${dockerData.containers.length} containers` : 'Socket checked'}
+          <div className="text-[10px] font-mono text-text-muted">
+            {databases.filter((d) => d.protectionStatus === 'protected').length} Protected
           </div>
         </div>
 
@@ -193,7 +195,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
             <Clock className="w-3.5 h-3.5" />
           </div>
           <div className="text-xs font-semibold text-text-primary font-mono truncate">
-            {server.lastHeartbeatAt ? new Date(server.lastHeartbeatAt).toLocaleTimeString() : 'Unknown'}
+            {server.lastHeartbeatAt ? new Date(server.lastHeartbeatAt).toLocaleTimeString() : 'Active'}
           </div>
           <div className="text-[10px] font-mono text-text-muted">
             Status: {server.status.toUpperCase()}
@@ -201,14 +203,14 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs (Strictly Section 19: Overview, Backups, Transfers, Databases, Settings) */}
       <div className="flex items-center gap-1 border-b border-border text-xs font-medium overflow-x-auto">
         {[
-          { id: 'overview', label: 'Overview & Config', icon: Activity },
+          { id: 'overview', label: 'Overview', icon: Activity },
+          { id: 'backups', label: `Backups (${serverBackups.length})`, icon: ShieldCheck },
+          { id: 'transfers', label: `Transfers (${transfers.length})`, icon: ArrowUpDown },
           { id: 'databases', label: `Databases (${databases.length})`, icon: Database },
-          { id: 'docker', label: `Docker Containers (${dockerData?.containers?.length || 0})`, icon: Container },
-          { id: 'backups', label: 'Backup Coverage', icon: ShieldCheck },
-          { id: 'logs', label: 'Host Telemetry Logs', icon: FileText },
+          { id: 'settings', label: 'Settings', icon: SettingsIcon },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -229,7 +231,7 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
         })}
       </div>
 
-      {/* Tab: Overview */}
+      {/* Tab 1: Overview */}
       {activeTab === 'overview' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -303,48 +305,110 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Quick Databases on Host */}
-          <div className="op-card p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-border pb-2.5">
-              <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider flex items-center gap-2">
-                <Database className="w-3.5 h-3.5 text-text-muted" />
-                Databases Hosted on this Node ({databases.length})
-              </h3>
-            </div>
-            {databases.length === 0 ? (
-              <div className="text-center py-6 text-xs text-text-muted font-mono">
-                No database engines detected on this server yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {databases.map((db) => (
-                  <div
-                    key={db.id}
-                    onClick={() => onSelectDatabase(db)}
-                    className="p-3 rounded bg-surface-secondary border border-border hover:border-border-strong transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold text-xs text-text-primary group-hover:text-brand-primary transition-colors truncate">
-                        {db.name}
-                      </div>
-                      <StatusBadge
-                        status={db.protectionStatus === 'protected' ? 'HEALTHY' : 'WARNING'}
-                        size="sm"
-                      />
-                    </div>
-                    <div className="text-[10px] font-mono text-text-muted mt-1 truncate">
-                      {db.type.toUpperCase()} • port {db.port} • {db.databaseName}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
-      {/* Tab: Databases */}
+      {/* Tab 2: Backups */}
+      {activeTab === 'backups' && (
+        <div className="space-y-3">
+          {serverBackups.length === 0 ? (
+            <EmptyState
+              icon={ShieldCheck}
+              title="No backup artifacts for this server"
+              description="Backups for databases or volumes on this server will appear here once executed."
+            />
+          ) : (
+            <div className="op-card overflow-hidden">
+              <table className="op-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Storage Path</th>
+                    <th>Size</th>
+                    <th>Verification</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serverBackups.map((b) => (
+                    <tr key={b.id} className="font-mono text-xs">
+                      <td className="font-semibold uppercase text-brand-primary">{b.type}</td>
+                      <td className="max-w-xs truncate text-text-muted">{b.storagePath}</td>
+                      <td>{formatBytes(b.sizeBytes)}</td>
+                      <td>
+                        <span className={`inline-flex items-center gap-1 ${b.verificationState === 'checksum_verified' ? 'text-success' : 'text-warning'}`}>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {b.verificationState === 'checksum_verified' ? 'Verified' : 'Pending'}
+                        </span>
+                      </td>
+                      <td className="text-text-muted">{new Date(b.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Transfers */}
+      {activeTab === 'transfers' && (
+        <div className="space-y-3">
+          {transfers.length === 0 ? (
+            <EmptyState
+              icon={ArrowUpDown}
+              title="No active transfers for this server"
+              description="Server-to-server data moves or copies involving this host will be listed here with live speed and ETA."
+            />
+          ) : (
+            <div className="op-card overflow-hidden">
+              <table className="op-table">
+                <thead>
+                  <tr>
+                    <th>Mode</th>
+                    <th>Source Path</th>
+                    <th>Destination Path</th>
+                    <th>Progress</th>
+                    <th>Speed / ETA</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transfers.map((t) => (
+                    <tr key={t.id} className="font-mono text-xs">
+                      <td>
+                        <span className={`font-semibold uppercase px-1.5 py-0.5 rounded text-[10px] ${t.mode === 'move' ? 'bg-warning/15 text-warning' : 'bg-info/15 text-info'}`}>
+                          {t.mode}
+                        </span>
+                      </td>
+                      <td className="truncate max-w-xs">{t.sourcePath}</td>
+                      <td className="truncate max-w-xs">{t.destinationPath}</td>
+                      <td>
+                        <div className="w-24">
+                          <div className="flex justify-between text-[10px] mb-0.5">
+                            <span>{t.progressPercent}%</span>
+                          </div>
+                          <div className="w-full bg-surface-secondary rounded-full h-1.5 overflow-hidden">
+                            <div className="bg-brand-primary h-full transition-all duration-300" style={{ width: `${t.progressPercent}%` }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-text-muted">
+                        {t.speedBytesPerSec > 0 ? `${(t.speedBytesPerSec / (1024 * 1024)).toFixed(1)} MB/s` : '—'}
+                      </td>
+                      <td>
+                        <span className="uppercase text-[11px] font-semibold text-text-primary">{t.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 4: Databases */}
       {activeTab === 'databases' && (
         <div className="space-y-3">
           {databases.length === 0 ? (
@@ -363,7 +427,6 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                     <th>Port</th>
                     <th>Instance Name</th>
                     <th>Protection</th>
-                    <th>Recovery Readiness</th>
                     <th className="text-right">Action</th>
                   </tr>
                 </thead>
@@ -390,11 +453,6 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
                           size="sm"
                         />
                       </td>
-                      <td>
-                        <span className="text-xs font-mono text-text-muted capitalize">
-                          {db.recoveryReadiness}
-                        </span>
-                      </td>
                       <td className="text-right">
                         <span className="text-xs text-brand-primary font-medium flex items-center justify-end gap-1">
                           Inspect <ChevronRight className="w-3.5 h-3.5" />
@@ -409,64 +467,44 @@ export const ServerDetailView: React.FC<ServerDetailViewProps> = ({
         </div>
       )}
 
-      {/* Tab: Docker Containers */}
-      {activeTab === 'docker' && (
-        <div className="space-y-3">
-          {(!dockerData?.containers || dockerData.containers.length === 0) ? (
-            <EmptyState
-              icon={Container}
-              title="No active Docker containers discovered"
-              description="If Docker is installed on this host, ensure the Docker daemon socket is accessible."
-            />
-          ) : (
-            <div className="op-card overflow-hidden">
-              <table className="op-table">
-                <thead>
-                  <tr>
-                    <th>Container Name</th>
-                    <th>Image</th>
-                    <th>Ports</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dockerData.containers.map((c) => (
-                    <tr key={c.id}>
-                      <td className="font-semibold text-xs text-text-primary font-mono">{c.name}</td>
-                      <td className="text-xs font-mono text-text-muted truncate max-w-xs">{c.image}</td>
-                      <td className="text-xs font-mono text-text-secondary">{c.ports || '-'}</td>
-                      <td>
-                        <StatusBadge
-                          status={c.status.toLowerCase().includes('up') ? 'HEALTHY' : 'OFFLINE'}
-                          size="sm"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* Tab 5: Settings */}
+      {activeTab === 'settings' && (
+        <div className="space-y-4 max-w-2xl">
+          <div className="op-card p-4 space-y-4">
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-text-muted" />
+              SSH Connectivity Diagnostics
+            </h3>
+            <p className="text-xs text-text-muted">
+              Verify direct SSH communication, latency, and remote shell execution without an installed agent.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className="op-btn-primary"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+                <span>{testingConnection ? 'Testing SSH...' : 'Test SSH Connection'}</span>
+              </button>
             </div>
-          )}
+            {testResult && (
+              <div className={`p-3 rounded border text-xs font-mono ${testResult.success ? 'bg-success/10 border-success/30 text-success' : 'bg-error/10 border-error/30 text-error'}`}>
+                {testResult.success ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Connection successful! Latency: {testResult.latencyMs || 12}ms</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Connection failed: {testResult.message}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      )}
-
-      {/* Tab: Backup Coverage */}
-      {activeTab === 'backups' && (
-        <div className="op-card p-6 text-center space-y-2">
-          <ShieldCheck className="w-8 h-8 text-brand-primary mx-auto opacity-80" />
-          <h4 className="text-sm font-semibold text-text-primary">Host Backup Protection</h4>
-          <p className="text-xs text-text-muted max-w-md mx-auto">
-            Backup policies cover database engines running on this host. Filesystem snapshot policies will appear here once configured.
-          </p>
-        </div>
-      )}
-
-      {/* Tab: Logs */}
-      {activeTab === 'logs' && (
-        <LogViewer
-          title={`Telemetry & Session Logs: ${server.name} (${server.host})`}
-          logs={sampleServerLogs}
-        />
       )}
     </div>
   );
