@@ -42,6 +42,11 @@ export interface Backup {
   sequence: number;
   storagePath: string;
   sizeBytes: number;
+  totalBytes?: number;
+  changedBytes?: number;
+  transferredBytes?: number;
+  skippedBytes?: number;
+  sourcePath?: string;
   checksumSha256: string;
   encryption: 'none' | 'aes_256_gcm';
   verificationState: BackupVerificationState;

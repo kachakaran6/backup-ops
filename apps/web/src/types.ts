@@ -143,6 +143,11 @@ export interface Backup {
   sequence: number;
   storagePath: string;
   sizeBytes: number;
+  totalBytes?: number;
+  changedBytes?: number;
+  transferredBytes?: number;
+  skippedBytes?: number;
+  sourcePath?: string;
   checksumSha256: string;
   encryption: string;
   verificationState: BackupVerificationState;
@@ -153,6 +158,37 @@ export interface Backup {
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TransferMode = 'copy' | 'move';
+export type TransferStatus = 'queued' | 'planning' | 'running' | 'verifying' | 'completed' | 'failed' | 'cancelled' | 'paused';
+
+export interface TransferJob {
+  id: string;
+  sourceServerId?: string;
+  sourceServerName?: string;
+  sourcePath: string;
+  destinationServerId?: string;
+  destinationServerName?: string;
+  destinationPath: string;
+  mode: TransferMode;
+  status: TransferStatus;
+  progressPercentage: number;
+  transferredBytes: number;
+  totalBytes: number;
+  speedBytesPerSec?: number;
+  etaSeconds?: number;
+  checksumAlgorithm: string;
+  sourceChecksum?: string;
+  destinationChecksum?: string;
+  verified: boolean;
+  verificationError?: string;
+  sourceDeletedAfterMove?: boolean;
+  pausedReason?: string;
+  checkpointOffset?: number;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
 }
 
 export interface RestoreJob {
