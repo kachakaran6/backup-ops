@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Activity,
   Layers,
+  FolderOpen,
 } from 'lucide-react';
 import { Server } from '../types';
 import * as api from '../services/api';
@@ -26,6 +27,16 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { FilterBar } from '../components/common/FilterBar';
 import { LogViewer } from '../components/common/LogViewer';
 import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
+import { FilesystemBrowser } from '../components/common/FilesystemBrowser';
+
+const COMMON_PATHS = [
+  { label: '/var/www', path: '/var/www' },
+  { label: '/home', path: '/home' },
+  { label: '/etc', path: '/etc' },
+  { label: '/opt', path: '/opt' },
+  { label: 'Docker Volumes', path: '/var/lib/docker/volumes' },
+  { label: '/data', path: '/data' },
+];
 
 interface TransfersViewProps {
   servers?: Server[];
@@ -51,6 +62,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
   const [confirmMove, setConfirmMove] = useState<boolean>(false);
   const [starting, setStarting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [browsingTarget, setBrowsingTarget] = useState<'source' | 'destination' | null>(null);
 
   const loadData = async () => {
     try {
@@ -559,15 +571,55 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                     </select>
                   </div>
                   <div>
-                    <label className="block text-text-secondary mb-1">Source Path / Directory</label>
-                    <input
-                      type="text"
-                      required
-                      value={sourcePath}
-                      onChange={(e) => setSourcePath(e.target.value)}
-                      placeholder="/var/www/app"
-                      className="op-input font-mono"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-text-secondary">Source Path / Directory</label>
+                      <button
+                        type="button"
+                        onClick={() => setBrowsingTarget('source')}
+                        disabled={!sourceServerId}
+                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-40 disabled:hover:no-underline"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        <span>Browse Server</span>
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        required
+                        value={sourcePath}
+                        onChange={(e) => setSourcePath(e.target.value)}
+                        placeholder="/var/www/app"
+                        className="op-input font-mono flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBrowsingTarget('source')}
+                        disabled={!sourceServerId}
+                        className="op-btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1 shrink-0"
+                        title="Browse Server Filesystem"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-brand-primary" />
+                        <span className="hidden sm:inline">Browse</span>
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      <span className="text-[10px] text-text-muted self-center mr-0.5">Presets:</span>
+                      {COMMON_PATHS.map((preset) => (
+                        <button
+                          key={preset.path}
+                          type="button"
+                          onClick={() => setSourcePath(preset.path)}
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                            sourcePath === preset.path
+                              ? 'bg-brand-primary/10 border-brand-primary/40 text-brand-primary font-semibold'
+                              : 'bg-surface-primary border-border text-text-muted hover:text-text-secondary hover:border-border-strong'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -594,15 +646,55 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                     </select>
                   </div>
                   <div>
-                    <label className="block text-text-secondary mb-1">Destination Path / Directory</label>
-                    <input
-                      type="text"
-                      required
-                      value={destinationPath}
-                      onChange={(e) => setDestinationPath(e.target.value)}
-                      placeholder="/var/www/app"
-                      className="op-input font-mono"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-text-secondary">Destination Path / Directory</label>
+                      <button
+                        type="button"
+                        onClick={() => setBrowsingTarget('destination')}
+                        disabled={!destinationServerId}
+                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-40 disabled:hover:no-underline"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        <span>Browse Server</span>
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        required
+                        value={destinationPath}
+                        onChange={(e) => setDestinationPath(e.target.value)}
+                        placeholder="/var/www/app"
+                        className="op-input font-mono flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBrowsingTarget('destination')}
+                        disabled={!destinationServerId}
+                        className="op-btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1 shrink-0"
+                        title="Browse Destination Server Filesystem"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-brand-primary" />
+                        <span className="hidden sm:inline">Browse</span>
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      <span className="text-[10px] text-text-muted self-center mr-0.5">Presets:</span>
+                      {COMMON_PATHS.map((preset) => (
+                        <button
+                          key={preset.path}
+                          type="button"
+                          onClick={() => setDestinationPath(preset.path)}
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                            destinationPath === preset.path
+                              ? 'bg-brand-primary/10 border-brand-primary/40 text-brand-primary font-semibold'
+                              : 'bg-surface-primary border-border text-text-muted hover:text-text-secondary hover:border-border-strong'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -775,6 +867,29 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
             </div>
           </div>
         </div>
+      )}
+
+      {/* Filesystem Browser Modal */}
+      {browsingTarget && (
+        <FilesystemBrowser
+          serverId={browsingTarget === 'source' ? sourceServerId : destinationServerId}
+          initialPath={browsingTarget === 'source' ? sourcePath : destinationPath}
+          title={
+            browsingTarget === 'source'
+              ? `Select Source Directory (${servers.find((s) => s.id === sourceServerId)?.name || 'Source'})`
+              : `Select Destination Directory (${servers.find((s) => s.id === destinationServerId)?.name || 'Destination'})`
+          }
+          directoriesOnly={false}
+          onSelect={(selected) => {
+            if (browsingTarget === 'source') {
+              setSourcePath(selected);
+            } else {
+              setDestinationPath(selected);
+            }
+            setBrowsingTarget(null);
+          }}
+          onCancel={() => setBrowsingTarget(null)}
+        />
       )}
     </div>
   );
