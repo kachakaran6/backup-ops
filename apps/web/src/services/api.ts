@@ -651,6 +651,57 @@ export async function cancelJob(id: string): Promise<void> {
   } catch {}
 }
 
+// Transfers API (Server-to-Server and Data Movement)
+export async function fetchTransfers(status?: string): Promise<any[]> {
+  try {
+    const url = status && status !== 'all'
+      ? `${API_BASE}/transfers?status=${status}&organizationId=default`
+      : `${API_BASE}/transfers?organizationId=default`;
+    const res = await authFetch(url);
+    if (res.ok) return await res.json();
+  } catch {}
+  return [];
+}
+
+export async function createTransfer(data: {
+  sourceServerId?: string;
+  sourcePath: string;
+  destinationServerId?: string;
+  destinationPath: string;
+  mode: 'copy' | 'move';
+  verifyChecksum?: boolean;
+  confirmDestructiveMove?: boolean;
+  options?: Record<string, any>;
+}): Promise<any> {
+  const res = await authFetch(`${API_BASE}/transfers?organizationId=default`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: `Transfer failed (${res.status})` }));
+    const errorMsg = Array.isArray(err.message) ? err.message.join(', ') : err.message || `Transfer failed (${res.status})`;
+    throw new Error(errorMsg);
+  }
+  return await res.json();
+}
+
+export async function pauseTransfer(id: string): Promise<void> {
+  await authFetch(`${API_BASE}/transfers/${id}/pause?organizationId=default`, { method: 'POST' });
+}
+
+export async function resumeTransfer(id: string): Promise<void> {
+  await authFetch(`${API_BASE}/transfers/${id}/resume?organizationId=default`, { method: 'POST' });
+}
+
+export async function cancelTransfer(id: string): Promise<void> {
+  await authFetch(`${API_BASE}/transfers/${id}/cancel?organizationId=default`, { method: 'POST' });
+}
+
+export async function retryTransfer(id: string): Promise<void> {
+  await authFetch(`${API_BASE}/transfers/${id}/retry?organizationId=default`, { method: 'POST' });
+}
+
 export async function saveNotificationRule(eventOrData: any, data?: any): Promise<NotificationRule | null> {
   try {
     const event = typeof eventOrData === 'string' ? eventOrData : eventOrData?.event;
@@ -717,6 +768,14 @@ export const api = {
   restore: {
     list: fetchRestoreJobs,
     create: createRestoreJob,
+  },
+  transfers: {
+    list: fetchTransfers,
+    create: createTransfer,
+    pause: pauseTransfer,
+    resume: resumeTransfer,
+    cancel: cancelTransfer,
+    retry: retryTransfer,
   },
   jobs: {
     list: fetchJobs,
