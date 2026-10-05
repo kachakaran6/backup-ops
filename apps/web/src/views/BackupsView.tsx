@@ -410,7 +410,7 @@ export const BackupsView: React.FC<BackupsViewProps> = (props) => {
                   <tbody>
                     {filteredBackups.map((backup) => {
                       const db = databases.find((d) => d.id === backup.sourceDatabaseId);
-                      const dest = storageDestinations.find((s) => s.id === backup.storageDestinationId);
+                      const dest = storageDestinations.find((s) => s.id === backup.destinationStorageId || s.id === backup.storageDestinationId);
 
                       return (
                         <tr key={backup.id} className="hover:bg-surface-hover transition-colors font-mono">

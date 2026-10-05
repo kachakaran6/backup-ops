@@ -38,6 +38,7 @@ export interface Backup {
   sourceDatabaseId?: string;
   sourceServerId?: string;
   destinationStorageId: string;
+  storageDestinationId?: string;
   type: BackupType;
   sequence: number;
   storagePath: string;
@@ -53,6 +54,7 @@ export interface Backup {
   verificationError?: string;
   recoveryPointTime?: string;
   expiresAt?: string;
+  retentionUntil?: string;
   retentionMark?: 'daily' | 'weekly' | 'monthly';
   status: 'completed' | 'failed' | 'pruned';
   createdAt: string;

@@ -20,6 +20,7 @@ import {
   Moon,
   Plus,
   ArrowRight,
+  Clock,
   X,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
