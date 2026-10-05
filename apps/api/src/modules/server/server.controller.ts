@@ -72,6 +72,17 @@ export class ServerController {
     return this.serverService.getServerDocker(organizationId, id);
   }
 
+  @Get(':id/filesystem')
+  async browseFilesystem(
+    @Param('id') id: string,
+    @Query('path') path?: string,
+    @Query('organizationId') orgIdQuery?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const organizationId = user?.organizationId || orgIdQuery || 'default';
+    return this.serverService.browseFilesystem(organizationId, id, path || '/');
+  }
+
   @Post(':id/volumes')
   async addServerVolume(
     @Param('id') id: string,

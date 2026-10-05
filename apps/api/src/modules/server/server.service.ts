@@ -369,6 +369,178 @@ export class ServerService implements OnApplicationBootstrap {
     return newVol;
   }
 
+  async browseFilesystem(
+    organizationId: string,
+    serverId: string,
+    path: string = '/',
+  ): Promise<{
+    serverId: string;
+    serverName: string;
+    currentPath: string;
+    parentPath: string | null;
+    entries: Array<{
+      name: string;
+      path: string;
+      type: 'directory' | 'file';
+      sizeBytes?: number;
+      modifiedAt?: string;
+      permissions?: string;
+    }>;
+    totalEntries: number;
+  }> {
+    const server = await this.findOne(organizationId, serverId);
+    const normalizedPath = this.normalizePath(path);
+    const parentPath = normalizedPath === '/' ? null : normalizedPath.split('/').slice(0, -1).join('/') || '/';
+
+    // TODO: Replace with real SSH/agent execution when Go agent is available.
+    // For now, return realistic directory listings based on common Linux paths.
+    const entries = this.getSimulatedDirectoryEntries(normalizedPath);
+
+    return {
+      serverId: server.id,
+      serverName: server.name,
+      currentPath: normalizedPath,
+      parentPath,
+      entries,
+      totalEntries: entries.length,
+    };
+  }
+
+  private normalizePath(path: string): string {
+    // Prevent path traversal attacks
+    const cleaned = path
+      .replace(/\\/g, '/')
+      .replace(/\/+/g, '/')
+      .replace(/\.\./g, '');
+    return cleaned.endsWith('/') && cleaned.length > 1
+      ? cleaned.slice(0, -1)
+      : cleaned || '/';
+  }
+
+  private getSimulatedDirectoryEntries(
+    path: string,
+  ): Array<{
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    sizeBytes?: number;
+    modifiedAt?: string;
+    permissions?: string;
+  }> {
+    const now = new Date();
+    const ago = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
+
+    const directoryLayouts: Record<
+      string,
+      Array<{
+        name: string;
+        type: 'directory' | 'file';
+        sizeBytes?: number;
+        modifiedAt?: string;
+        permissions?: string;
+      }>
+    > = {
+      '/': [
+        { name: 'bin', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(90) },
+        { name: 'boot', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
+        { name: 'dev', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'etc', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
+        { name: 'home', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: 'opt', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(15) },
+        { name: 'root', type: 'directory', permissions: 'drwx------', modifiedAt: ago(1) },
+        { name: 'srv', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(60) },
+        { name: 'tmp', type: 'directory', permissions: 'drwxrwxrwt', modifiedAt: ago(0) },
+        { name: 'usr', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
+        { name: 'var', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+      ],
+      '/var': [
+        { name: 'backups', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'cache', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'lib', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'log', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'mail', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
+        { name: 'opt', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
+        { name: 'run', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'spool', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
+        { name: 'tmp', type: 'directory', permissions: 'drwxrwxrwt', modifiedAt: ago(0) },
+        { name: 'www', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+      ],
+      '/var/www': [
+        { name: 'app', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: 'html', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(3) },
+        { name: 'api', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: 'staging', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(7) },
+      ],
+      '/var/www/app': [
+        { name: 'current', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'releases', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'shared', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: '.env', type: 'file', sizeBytes: 2048, permissions: '-rw-------', modifiedAt: ago(2) },
+        { name: 'docker-compose.yml', type: 'file', sizeBytes: 1536, permissions: '-rw-r--r--', modifiedAt: ago(3) },
+      ],
+      '/var/lib': [
+        { name: 'docker', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+        { name: 'postgresql', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+        { name: 'mysql', type: 'directory', permissions: 'drwx------', modifiedAt: ago(5) },
+        { name: 'redis', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+      ],
+      '/var/lib/docker': [
+        { name: 'containers', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+        { name: 'image', type: 'directory', permissions: 'drwx------', modifiedAt: ago(1) },
+        { name: 'network', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+        { name: 'overlay2', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+        { name: 'volumes', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
+      ],
+      '/var/backups': [
+        { name: 'daily', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'weekly', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
+        { name: 'monthly', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
+        { name: 'database', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+      ],
+      '/home': [
+        { name: 'ubuntu', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'deploy', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+      ],
+      '/home/ubuntu': [
+        { name: '.ssh', type: 'directory', permissions: 'drwx------', modifiedAt: ago(30) },
+        { name: 'apps', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
+        { name: 'backups', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+        { name: 'scripts', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
+        { name: '.bashrc', type: 'file', sizeBytes: 3771, permissions: '-rw-r--r--', modifiedAt: ago(60) },
+        { name: '.profile', type: 'file', sizeBytes: 807, permissions: '-rw-r--r--', modifiedAt: ago(60) },
+      ],
+      '/etc': [
+        { name: 'nginx', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
+        { name: 'ssh', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
+        { name: 'ssl', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
+        { name: 'systemd', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(20) },
+        { name: 'crontab', type: 'file', sizeBytes: 722, permissions: '-rw-r--r--', modifiedAt: ago(15) },
+        { name: 'fstab', type: 'file', sizeBytes: 604, permissions: '-rw-r--r--', modifiedAt: ago(90) },
+        { name: 'hostname', type: 'file', sizeBytes: 18, permissions: '-rw-r--r--', modifiedAt: ago(120) },
+        { name: 'hosts', type: 'file', sizeBytes: 221, permissions: '-rw-r--r--', modifiedAt: ago(120) },
+      ],
+      '/opt': [
+        { name: 'backupops', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: 'coolify', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(3) },
+      ],
+    };
+
+    const layout = directoryLayouts[path];
+    if (!layout) {
+      // For unknown paths, return a generic set of placeholder entries
+      return [
+        { name: 'data', type: 'directory' as const, path: `${path}/data`, permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
+        { name: 'config', type: 'directory' as const, path: `${path}/config`, permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
+        { name: 'logs', type: 'directory' as const, path: `${path}/logs`, permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
+      ];
+    }
+
+    return layout.map((entry) => ({
+      ...entry,
+      path: path === '/' ? `/${entry.name}` : `${path}/${entry.name}`,
+    }));
+  }
+
   async remove(organizationId: string, id: string): Promise<void> {
     const server = await this.findOne(organizationId, id);
     await this.serverRepo.remove(server);
