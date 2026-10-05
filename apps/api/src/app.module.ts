@@ -22,6 +22,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { TransferModule } from './modules/transfer/transfer.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { NotificationModule } from './modules/notification/notification.module';
     RestoreModule,
     MonitoringModule,
     NotificationModule,
+    TransferModule,
   ],
   providers: [
     {

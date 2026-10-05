@@ -65,7 +65,22 @@ export class Backup {
   @Column({ type: 'bigint', default: 0 })
   sizeBytes: number;
 
-  @Column()
+  @Column({ type: 'bigint', default: 0 })
+  totalBytes: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  changedBytes: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  transferredBytes: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  skippedBytes: number;
+
+  @Column({ nullable: true })
+  sourcePath?: string;
+
+  @Column({ default: 'pending' })
   checksumSha256: string;
 
   @Column({ type: 'varchar', default: 'aes_256_gcm' })
