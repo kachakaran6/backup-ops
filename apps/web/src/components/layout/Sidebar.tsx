@@ -3,18 +3,12 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Server,
-  Cloud,
-  Container,
   Database,
-  HardDrive,
   ShieldCheck,
-  RotateCcw,
-  Activity,
-  Layers,
-  ScrollText,
-  Key,
+  ArrowUpDown,
+  HardDrive,
+  Calendar,
   Settings,
-  Bell,
   X,
   ChevronLeft,
   ChevronRight,
@@ -54,56 +48,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const navSections = [
-    {
-      title: 'OVERVIEW',
-      items: [
-        { path: '/overview', label: 'Overview', icon: LayoutDashboard },
-      ],
-    },
-    {
-      title: 'INFRASTRUCTURE',
-      items: [
-        { path: '/infrastructure/coolify', label: 'Coolify', icon: Cloud },
-        { path: '/infrastructure/servers', label: 'Servers', icon: Server },
-        { path: '/infrastructure/docker', label: 'Docker & Volumes', icon: Container },
-      ],
-    },
-    {
-      title: 'DATA & STORAGE',
-      items: [
-        { path: '/databases', label: 'Databases', icon: Database },
-        { path: '/storage', label: 'Storage', icon: HardDrive },
-      ],
-    },
-    {
-      title: 'PROTECTION',
-      items: [
-        { path: '/backups', label: 'Backups & Chains', icon: ShieldCheck },
-        { path: '/restore', label: 'Restore Center', icon: RotateCcw },
-      ],
-    },
-    {
-      title: 'OPERATIONS',
-      items: [
-        { path: '/operations', label: 'Jobs & Tasks', icon: Activity },
-      ],
-    },
-    {
-      title: 'OBSERVABILITY',
-      items: [
-        { path: '/monitoring', label: 'Platform Health', icon: Layers },
-        { path: '/audit', label: 'Audit Trail', icon: ScrollText },
-      ],
-    },
-    {
-      title: 'SYSTEM',
-      items: [
-        { path: '/notifications', label: 'Alert Channels', icon: Bell },
-        { path: '/vault', label: 'Secret Vault', icon: Key },
-        { path: '/settings', label: 'Settings', icon: Settings },
-      ],
-    },
+  const navItems = [
+    { path: '/overview', label: 'Overview', icon: LayoutDashboard },
+    { path: '/servers', label: 'Servers', icon: Server },
+    { path: '/databases', label: 'Databases', icon: Database },
+    { path: '/backups', label: 'Backups', icon: ShieldCheck },
+    { path: '/transfers', label: 'Transfers', icon: ArrowUpDown },
+    { path: '/storage', label: 'Storage', icon: HardDrive },
+    { path: '/schedules', label: 'Schedules', icon: Calendar },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
   const handleNavClick = (path: string) => {
@@ -160,49 +113,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Navigation Sections */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-        {navSections.map((section, idx) => (
-          <div key={idx} className="space-y-0.5">
-            {!isCollapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-mono font-semibold tracking-wider text-sidebar-muted uppercase">
-                {section.title}
-              </div>
-            )}
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const isActive =
-                  location.pathname === item.path ||
-                  (item.path !== '/overview' && location.pathname.startsWith(item.path));
-                const Icon = item.icon;
+      {/* Navigation Items (8 Core Sections) */}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
+        {navItems.map((item) => {
+          const isActive =
+            location.pathname === item.path ||
+            (item.path !== '/overview' && location.pathname.startsWith(item.path));
+          const Icon = item.icon;
 
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => handleNavClick(item.path)}
-                    title={isCollapsed ? item.label : undefined}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer group ${
-                      isActive
-                        ? 'bg-sidebar-active text-sidebar-active-text font-semibold border-l-2 border-brand pl-2'
-                        : 'text-sidebar-muted hover:text-sidebar-text hover:bg-sidebar-surface'
-                    } ${isCollapsed ? 'justify-center !px-2' : ''}`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={`w-4 h-4 shrink-0 transition-colors ${
-                          isActive
-                            ? 'text-brand'
-                            : 'text-sidebar-muted group-hover:text-sidebar-text'
-                        }`}
-                      />
-                      {!isCollapsed && <span className="truncate">{item.label}</span>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+          return (
+            <button
+              key={item.path}
+              onClick={() => handleNavClick(item.path)}
+              title={isCollapsed ? item.label : undefined}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer group ${
+                isActive
+                  ? 'bg-sidebar-active text-sidebar-active-text font-semibold border-l-2 border-brand pl-2'
+                  : 'text-sidebar-muted hover:text-sidebar-text hover:bg-sidebar-surface'
+              } ${isCollapsed ? 'justify-center !px-2' : ''}`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Icon
+                  className={`w-4 h-4 shrink-0 transition-colors ${
+                    isActive
+                      ? 'text-brand'
+                      : 'text-sidebar-muted group-hover:text-sidebar-text'
+                  }`}
+                />
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
+              </div>
+            </button>
+          );
+        })}
       </nav>
 
       {/* Footer System Strip */}

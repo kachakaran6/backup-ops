@@ -47,7 +47,7 @@ export const AppLayout: React.FC = () => {
   const getHeaderInfo = () => {
     const path = location.pathname;
 
-    if (path.startsWith('/infrastructure/servers/')) {
+    if (path.startsWith('/servers/') || path.startsWith('/infrastructure/servers/')) {
       return { title: 'Server Details' };
     }
     if (path.startsWith('/databases/')) {
@@ -58,31 +58,26 @@ export const AppLayout: React.FC = () => {
       case '/overview':
       case '/':
         return { title: 'Overview' };
-      case '/infrastructure/coolify':
-        return { title: 'Coolify' };
+      case '/servers':
       case '/infrastructure/servers':
         return { title: 'Servers' };
-      case '/infrastructure/docker':
-        return { title: 'Docker Volumes' };
       case '/databases':
         return { title: 'Databases' };
-      case '/storage':
-        return { title: 'Storage' };
       case '/backups':
-        return { title: 'Backups' };
       case '/restore':
-        return { title: 'Restore' };
+        return { title: 'Backups' };
+      case '/transfers':
       case '/operations':
-        return { title: 'Operations' };
-      case '/monitoring':
-        return { title: 'Monitoring' };
-      case '/notifications':
-        return { title: 'Notifications' };
-      case '/vault':
-        return { title: 'Credentials Vault' };
-      case '/audit':
-        return { title: 'Audit Logs' };
+        return { title: 'Transfers' };
+      case '/storage':
+        return { title: 'Storage Destinations' };
+      case '/schedules':
+        return { title: 'Schedules & Retention' };
       case '/settings':
+      case '/infrastructure/coolify':
+      case '/notifications':
+      case '/vault':
+      case '/audit':
         return { title: 'Settings' };
       default:
         return { title: 'BackupOps' };
@@ -90,8 +85,8 @@ export const AppLayout: React.FC = () => {
   };
 
   const handleQuickAction = (action: 'coolify' | 'server' | 'backup') => {
-    if (action === 'coolify') navigate('/infrastructure/coolify');
-    if (action === 'server') navigate('/infrastructure/servers');
+    if (action === 'coolify') navigate('/settings?tab=coolify');
+    if (action === 'server') navigate('/servers');
     if (action === 'backup') navigate('/backups');
   };
 

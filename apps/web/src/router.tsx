@@ -12,20 +12,14 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginView } from './views/LoginView';
 import { OverviewView } from './views/OverviewView';
-import { CoolifyView } from './views/CoolifyView';
 import { ServersView } from './views/ServersView';
 import { ServerDetailView } from './views/ServerDetailView';
-import { DockerView } from './views/DockerView';
 import { DatabasesView } from './views/DatabasesView';
 import { DatabaseDetailView } from './views/DatabaseDetailView';
 import { StorageView } from './views/StorageView';
 import { BackupsView } from './views/BackupsView';
-import { RestoreView } from './views/RestoreView';
-import { OperationsView } from './views/OperationsView';
-import { MonitoringView } from './views/MonitoringView';
-import { NotificationsView } from './views/NotificationsView';
-import { VaultView } from './views/VaultView';
-import { AuditLogView } from './views/AuditLogView';
+import { TransfersView } from './views/TransfersView';
+import { SchedulesView } from './views/SchedulesView';
 import { SettingsView } from './views/SettingsView';
 import { useControlPlane } from './context/ControlPlaneContext';
 
@@ -43,38 +37,26 @@ const OverviewRoute: React.FC = () => {
       chains={chains}
       onNavigate={(tab: string) => {
         const map: Record<string, string> = {
-          coolify: '/infrastructure/coolify',
-          servers: '/infrastructure/servers',
-          docker: '/infrastructure/docker',
+          coolify: '/settings?tab=coolify',
+          servers: '/servers',
+          docker: '/servers',
           databases: '/databases',
           storage: '/storage',
           backups: '/backups',
-          restore: '/restore',
-          operations: '/operations',
-          monitoring: '/monitoring',
-          notifications: '/notifications',
-          vault: '/vault',
-          audit: '/audit',
+          restore: '/backups',
+          operations: '/transfers',
+          transfers: '/transfers',
+          schedules: '/schedules',
+          monitoring: '/overview',
+          notifications: '/settings?tab=notifications',
+          vault: '/settings?tab=vault',
+          audit: '/settings?tab=audit',
           settings: '/settings',
         };
         navigate(map[tab] || `/${tab}`);
       }}
-      onConnectCoolify={() => navigate('/infrastructure/coolify')}
-      onAddServer={() => navigate('/infrastructure/servers')}
-    />
-  );
-};
-
-const CoolifyRoute: React.FC = () => {
-  const { connections, refresh } = useControlPlane();
-  const navigate = useNavigate();
-  return (
-    <CoolifyView
-      connections={connections}
-      onRefresh={refresh}
-      onNavigateToServer={(serverId: string) =>
-        navigate(`/infrastructure/servers/${serverId}`)
-      }
+      onConnectCoolify={() => navigate('/settings?tab=coolify')}
+      onAddServer={() => navigate('/servers')}
     />
   );
 };
@@ -86,7 +68,7 @@ const ServersRoute: React.FC = () => {
     <ServersView
       servers={servers}
       onRefresh={refresh}
-      onSelectServer={(s) => navigate(`/infrastructure/servers/${s.id}`)}
+      onSelectServer={(s) => navigate(`/servers/${s.id}`)}
     />
   );
 };
@@ -105,7 +87,7 @@ const ServerDetailRoute: React.FC = () => {
           The requested server ID does not exist or has been reconciled.
         </p>
         <button
-          onClick={() => navigate('/infrastructure/servers')}
+          onClick={() => navigate('/servers')}
           className="op-btn-secondary mt-4"
         >
           Back to Servers
@@ -117,7 +99,7 @@ const ServerDetailRoute: React.FC = () => {
   return (
     <ServerDetailView
       server={server}
-      onBack={() => navigate('/infrastructure/servers')}
+      onBack={() => navigate('/servers')}
       onSelectDatabase={(db) => navigate(`/databases/${db.id}`)}
     />
   );
@@ -164,7 +146,7 @@ const DatabaseDetailRoute: React.FC = () => {
       database={database}
       onBack={() => navigate('/databases')}
       onTriggerBackup={() => navigate('/backups')}
-      onRestoreBackup={(b) => navigate(`/restore?backupId=${b.id}`)}
+      onRestoreBackup={(b) => navigate(`/backups?restoreBackupId=${b.id}`)}
     />
   );
 };
@@ -176,15 +158,12 @@ const StorageRoute: React.FC = () => {
 
 const BackupsRoute: React.FC = () => {
   const navigate = useNavigate();
-  return <BackupsView onRestore={(b) => navigate(`/restore?backupId=${b.id}`)} />;
+  return <BackupsView onRestore={(b) => navigate(`/backups?restoreBackupId=${b.id}`)} />;
 };
 
-const RestoreRoute: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const { backups } = useControlPlane();
-  const backupId = searchParams.get('backupId');
-  const preselected = backups.find((b) => b.id === backupId);
-  return <RestoreView preselectedBackup={preselected} />;
+const TransfersRoute: React.FC = () => {
+  const { servers, refresh } = useControlPlane();
+  return <TransfersView servers={servers} onRefresh={refresh} />;
 };
 
 export const AppRouter: React.FC = () => {
@@ -202,23 +181,30 @@ export const AppRouter: React.FC = () => {
             </ProtectedRoute>
           }
         >
+          {/* Core 8 Top-Level Navigation Routes */}
           <Route path="/" element={<Navigate to="/overview" replace />} />
           <Route path="/overview" element={<OverviewRoute />} />
-          <Route path="/infrastructure/coolify" element={<CoolifyRoute />} />
-          <Route path="/infrastructure/servers" element={<ServersRoute />} />
-          <Route path="/infrastructure/servers/:id" element={<ServerDetailRoute />} />
-          <Route path="/infrastructure/docker" element={<DockerView />} />
+          <Route path="/servers" element={<ServersRoute />} />
+          <Route path="/servers/:id" element={<ServerDetailRoute />} />
           <Route path="/databases" element={<DatabasesRoute />} />
           <Route path="/databases/:id" element={<DatabaseDetailRoute />} />
-          <Route path="/storage" element={<StorageRoute />} />
           <Route path="/backups" element={<BackupsRoute />} />
-          <Route path="/restore" element={<RestoreRoute />} />
-          <Route path="/operations" element={<OperationsView />} />
-          <Route path="/monitoring" element={<MonitoringView />} />
-          <Route path="/notifications" element={<NotificationsView />} />
-          <Route path="/vault" element={<VaultView />} />
-          <Route path="/audit" element={<AuditLogView />} />
+          <Route path="/transfers" element={<TransfersRoute />} />
+          <Route path="/storage" element={<StorageRoute />} />
+          <Route path="/schedules" element={<SchedulesView />} />
           <Route path="/settings" element={<SettingsView />} />
+
+          {/* Legacy & Sub-Route Redirects */}
+          <Route path="/infrastructure/servers" element={<Navigate to="/servers" replace />} />
+          <Route path="/infrastructure/servers/:id" element={<Navigate to="/servers/:id" replace />} />
+          <Route path="/infrastructure/docker" element={<Navigate to="/servers" replace />} />
+          <Route path="/infrastructure/coolify" element={<Navigate to="/settings?tab=coolify" replace />} />
+          <Route path="/operations" element={<Navigate to="/transfers" replace />} />
+          <Route path="/restore" element={<Navigate to="/backups" replace />} />
+          <Route path="/monitoring" element={<Navigate to="/overview" replace />} />
+          <Route path="/notifications" element={<Navigate to="/settings?tab=notifications" replace />} />
+          <Route path="/vault" element={<Navigate to="/settings?tab=vault" replace />} />
+          <Route path="/audit" element={<Navigate to="/settings?tab=audit" replace />} />
         </Route>
 
         {/* Wildcard Fallback */}
@@ -227,3 +213,4 @@ export const AppRouter: React.FC = () => {
     </BrowserRouter>
   );
 };
+
