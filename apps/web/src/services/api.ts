@@ -263,6 +263,46 @@ export async function fetchServerDocker(serverId: string): Promise<any> {
   return { installed: false, running: false, containers: [], volumes: [] };
 }
 
+export interface FilesystemEntry {
+  name: string;
+  path: string;
+  type: 'directory' | 'file';
+  sizeBytes?: number;
+  modifiedAt?: string;
+  permissions?: string;
+}
+
+export interface FilesystemBrowseResponse {
+  serverId: string;
+  serverName: string;
+  currentPath: string;
+  parentPath: string | null;
+  entries: FilesystemEntry[];
+  totalEntries: number;
+  error?: string;
+}
+
+export async function browseServerFilesystem(
+  serverId: string,
+  path: string = '/',
+): Promise<FilesystemBrowseResponse> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/servers/${serverId}/filesystem?path=${encodeURIComponent(path)}&organizationId=default`,
+    );
+    if (res.ok) return await res.json();
+  } catch {}
+  return {
+    serverId,
+    serverName: 'Unknown',
+    currentPath: path,
+    parentPath: null,
+    entries: [],
+    totalEntries: 0,
+    error: 'Failed to browse filesystem',
+  };
+}
+
 export async function addServerVolume(
   serverId: string,
   data: { name: string; driver?: string; mountpoint?: string; project?: string },
@@ -737,6 +777,7 @@ export const api = {
     create: createServer,
     delete: removeServer,
     test: testSshServer,
+    browseFilesystem: browseServerFilesystem,
   },
   databases: {
     list: fetchDatabases,
