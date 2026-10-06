@@ -25,6 +25,7 @@ export interface OperationJobData {
   storagePath?: string;
   targetType?: string;
   verifyChecksum?: boolean;
+  resumeFromCheckpoint?: boolean;
 }
 
 export class OperationProcessor {
@@ -360,24 +361,30 @@ export class OperationProcessor {
   async processTransfer(bullJob: Job<OperationJobData>): Promise<{ status: string; verified: boolean }> {
     const {
       jobId,
+      sourceServerId,
       sourcePath = './data/source',
+      destinationServerId,
       destinationPath = './data/destination',
       mode = 'copy',
       verifyChecksum = true,
+      resumeFromCheckpoint = false,
     } = bullJob.data;
 
     console.log(`[Worker] Executing ${mode.toUpperCase()} transfer job ${jobId}: ${sourcePath} -> ${destinationPath}`);
 
-    await this.updateJobStatus(jobId, 'planning', 5, `Planning ${mode.toUpperCase()} transfer`);
+    await this.updateJobStatus(jobId, 'running', 5, `Starting ${mode.toUpperCase()} transfer`);
     await this.addJobLog(jobId, 'info', `Transfer initialized: Mode=${mode.toUpperCase()}, Source=${sourcePath}, Dest=${destinationPath}`);
 
     const result = await this.transferEngine.transfer(
       {
         jobId,
+        sourceServerId,
         sourcePath,
+        destinationServerId,
         destinationPath,
         mode,
         verifyChecksum,
+        resumeFromCheckpoint,
       },
       async (p) => {
         await bullJob.updateProgress(p.percentage);
@@ -391,13 +398,53 @@ export class OperationProcessor {
     if (result.status === 'completed' && result.verified) {
       await this.updateJobStatus(jobId, 'completed', 100, `${mode.toUpperCase()} completed and verified`);
       await this.addJobLog(jobId, 'info', `Transfer job ${jobId} finished with SHA-256 verification.`);
+
+      try {
+        await this.dbPool.query(
+          `UPDATE jobs 
+           SET options = jsonb_set(
+                 jsonb_set(
+                   jsonb_set(
+                     jsonb_set(COALESCE(options, '{}'::jsonb), '{verified}', 'true'::jsonb),
+                     '{sourceChecksum}', $1::jsonb
+                   ),
+                   '{destinationChecksum}', $2::jsonb
+                 ),
+                 '{sourceDeletedAfterMove}', $3::jsonb
+               ),
+               "finishedAt" = NOW(),
+               "updatedAt" = NOW()
+           WHERE id = $4`,
+          [
+            JSON.stringify(result.sourceChecksum),
+            JSON.stringify(result.destinationChecksum),
+            JSON.stringify(result.sourceDeleted ?? false),
+            jobId,
+          ],
+        );
+      } catch (err: any) {
+        console.warn(`[Worker DB Update Options]: ${err.message}`);
+      }
     } else {
       await this.updateJobStatus(jobId, 'failed', 90, result.verificationError || 'Transfer failed verification');
       await this.addJobLog(jobId, 'error', result.verificationError || 'Transfer failed');
+
+      try {
+        await this.dbPool.query(
+          `UPDATE jobs 
+           SET state = 'failed',
+               error = $1,
+               "finishedAt" = NOW(),
+               "updatedAt" = NOW()
+           WHERE id = $2`,
+          [result.verificationError || 'Transfer failed', jobId],
+        );
+      } catch {}
     }
 
     return { status: result.status, verified: result.verified };
   }
+
 
   /**
    * RESTORE OPERATION
