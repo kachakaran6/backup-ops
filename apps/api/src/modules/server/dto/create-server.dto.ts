@@ -31,6 +31,10 @@ export class CreateDirectSshServerDto {
   @IsOptional()
   password?: string;
 
+  @IsString()
+  @IsOptional()
+  passphrase?: string;
+
   @IsArray()
   @IsOptional()
   tags?: string[];
@@ -62,4 +66,8 @@ export class TestSshConnectionDto {
   @IsString()
   @IsOptional()
   password?: string;
+
+  @IsString()
+  @IsOptional()
+  passphrase?: string;
 }

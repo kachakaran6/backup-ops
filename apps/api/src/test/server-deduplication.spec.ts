@@ -5,6 +5,9 @@ import { Server, ServerConnectionMode, ServerStatus } from '../modules/server/en
 import { Database } from '../modules/database/entities/database.entity';
 import { CredentialService } from '../modules/credential/credential.service';
 
+import { CoolifyService } from '../modules/coolify/coolify.service';
+import { SshProviderService } from '../modules/server/ssh-provider.service';
+
 describe('ServerService — Server Identity & Deduplication', () => {
   let service: ServerService;
   let serverRepo: any;
@@ -30,6 +33,8 @@ describe('ServerService — Server Identity & Deduplication', () => {
         { provide: getRepositoryToken(Server), useValue: serverRepo },
         { provide: getRepositoryToken(Database), useValue: dbRepo },
         { provide: CredentialService, useValue: { create: jest.fn().mockResolvedValue({ id: 'cred-1' }) } },
+        { provide: CoolifyService, useValue: { syncServers: jest.fn().mockResolvedValue([]) } },
+        { provide: SshProviderService, useValue: { discoverServer: jest.fn(), testConnection: jest.fn() } },
       ],
     }).compile();
 

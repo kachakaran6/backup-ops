@@ -1,21 +1,32 @@
-import { Injectable, NotFoundException, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as net from 'net';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Server, ServerConnectionMode, ServerStatus } from './entities/server.entity';
 import { Database } from '../database/entities/database.entity';
 import { CreateDirectSshServerDto, TestSshConnectionDto } from './dto/create-server.dto';
 import { CredentialService } from '../credential/credential.service';
 import { CredentialType } from '../credential/entities/credential.entity';
 import { CoolifyService } from '../coolify/coolify.service';
+import { SshProviderService, FilesystemEntry } from './ssh-provider.service';
 
 export interface SshTestResult {
   success: boolean;
   latencyMs: number;
   message: string;
+  hostname?: string;
   os?: string;
   arch?: string;
-  dockerRunning?: boolean;
+  kernel?: string;
+  cpuCores?: number;
+  memoryBytes?: number;
+  diskBytes?: number;
+  diskAvailableBytes?: number;
+  dockerInstalled?: boolean;
+  dockerVersion?: string;
+  capabilities?: string[];
   details?: Record<string, any>;
 }
 
@@ -30,6 +41,7 @@ export class ServerService implements OnApplicationBootstrap {
     private databaseRepo: Repository<Database>,
     private credentialService: CredentialService,
     private coolifyService: CoolifyService,
+    private sshProvider: SshProviderService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -93,20 +105,50 @@ export class ServerService implements OnApplicationBootstrap {
     return server;
   }
 
+  /**
+   * Tests SSH connection with real authentication and capability discovery.
+   */
   async testSshConnection(dto: TestSshConnectionDto): Promise<SshTestResult> {
     const start = Date.now();
     const port = dto.port || 22;
 
+    // If password or privateKey is provided, perform authenticated discovery
+    if (dto.password || dto.privateKey) {
+      const discovery = await this.sshProvider.discoverServer({
+        host: dto.host,
+        port,
+        username: dto.username || 'root',
+        password: dto.password,
+        privateKey: dto.privateKey,
+        passphrase: dto.passphrase,
+      });
+
+      return {
+        success: discovery.success,
+        latencyMs: discovery.latencyMs,
+        message: discovery.message,
+        hostname: discovery.hostname,
+        os: discovery.os,
+        arch: discovery.arch,
+        kernel: discovery.kernel,
+        cpuCores: discovery.cpuCores,
+        memoryBytes: discovery.memoryBytes,
+        diskBytes: discovery.diskBytes,
+        diskAvailableBytes: discovery.diskAvailableBytes,
+        dockerInstalled: discovery.dockerInstalled,
+        dockerVersion: discovery.dockerVersion,
+        capabilities: discovery.capabilities,
+      };
+    }
+
+    // Otherwise, perform TCP / banner reachability probe without fabricating server OS/arch
     try {
-      // 1. TCP network & SSH banner probe
       const banner = await new Promise<string>((resolve, reject) => {
         const socket = new net.Socket();
         socket.setTimeout(6000);
         let dataReceived = '';
 
-        socket.on('connect', () => {
-          // Connected, wait for SSH identification banner (e.g. SSH-2.0-OpenSSH_9.6)
-        });
+        socket.on('connect', () => {});
 
         socket.on('data', (chunk) => {
           dataReceived += chunk.toString();
@@ -134,10 +176,9 @@ export class ServerService implements OnApplicationBootstrap {
       return {
         success: true,
         latencyMs,
-        message: `SSH daemon reachable (${banner})`,
-        os: 'Linux (Ubuntu/Debian)',
-        arch: 'x86_64',
-        dockerRunning: true,
+        message: `SSH daemon reachable (${banner}). Authentication credentials required for full discovery.`,
+        dockerInstalled: false,
+        capabilities: ['ssh'],
         details: {
           banner,
           host: dto.host,
@@ -151,6 +192,8 @@ export class ServerService implements OnApplicationBootstrap {
         success: false,
         latencyMs,
         message: `Connection failed: ${err.message}`,
+        dockerInstalled: false,
+        capabilities: [],
       };
     }
   }
@@ -169,16 +212,36 @@ export class ServerService implements OnApplicationBootstrap {
           username: dto.username,
           privateKey: dto.privateKey,
           password: dto.password,
+          passphrase: dto.passphrase,
         },
       });
       credentialId = savedCred.id;
     }
 
-    // Test connection
+    // Resolve credentials for authenticated discovery
+    let resolvedPassword = dto.password;
+    let resolvedPrivateKey = dto.privateKey;
+    let resolvedPassphrase = dto.passphrase;
+
+    if (credentialId && !resolvedPassword && !resolvedPrivateKey) {
+      try {
+        const secret = await this.credentialService.decryptSecret(credentialId);
+        resolvedPassword = secret.password;
+        resolvedPrivateKey = secret.privateKey;
+        resolvedPassphrase = secret.passphrase;
+      } catch (err: any) {
+        this.logger.warn(`Could not decrypt credential ${credentialId} for server discovery: ${err.message}`);
+      }
+    }
+
+    // Perform real authenticated server discovery
     const testResult = await this.testSshConnection({
       host: dto.host,
       port: dto.port,
       username: dto.username,
+      password: resolvedPassword,
+      privateKey: resolvedPrivateKey,
+      passphrase: resolvedPassphrase,
     });
 
     // Check if server with this host and port already exists in organization
@@ -190,16 +253,30 @@ export class ServerService implements OnApplicationBootstrap {
       },
     });
 
+    const metadata = {
+      ...(existingServer?.metadata || {}),
+      latencyMs: testResult.latencyMs,
+      capabilities: testResult.capabilities || ['ssh', 'filesystemBrowse', 'filesystemTransfer'],
+      diskAvailableBytes: testResult.diskAvailableBytes,
+      hostname: testResult.hostname,
+    };
+
     if (existingServer) {
       existingServer.name = dto.name;
       existingServer.username = dto.username;
       existingServer.credentialId = credentialId || existingServer.credentialId;
       existingServer.os = testResult.os || existingServer.os;
       existingServer.arch = testResult.arch || existingServer.arch;
-      existingServer.dockerInstalled = testResult.dockerRunning ?? existingServer.dockerInstalled;
+      existingServer.kernel = testResult.kernel || existingServer.kernel;
+      existingServer.cpuCores = testResult.cpuCores ?? existingServer.cpuCores;
+      existingServer.memoryBytes = testResult.memoryBytes ?? existingServer.memoryBytes;
+      existingServer.diskBytes = testResult.diskBytes ?? existingServer.diskBytes;
+      existingServer.dockerInstalled = testResult.dockerInstalled ?? existingServer.dockerInstalled;
+      existingServer.dockerVersion = testResult.dockerVersion || existingServer.dockerVersion;
       existingServer.status = testResult.success ? ServerStatus.ONLINE : ServerStatus.OFFLINE;
       existingServer.lastHeartbeatAt = new Date();
       existingServer.tags = dto.tags || existingServer.tags;
+      existingServer.metadata = metadata;
       return this.serverRepo.save(existingServer);
     }
 
@@ -213,10 +290,16 @@ export class ServerService implements OnApplicationBootstrap {
       credentialId,
       os: testResult.os || 'Linux',
       arch: testResult.arch || 'x86_64',
-      dockerInstalled: testResult.dockerRunning ?? false,
+      kernel: testResult.kernel,
+      cpuCores: testResult.cpuCores || 1,
+      memoryBytes: testResult.memoryBytes,
+      diskBytes: testResult.diskBytes,
+      dockerInstalled: testResult.dockerInstalled ?? false,
+      dockerVersion: testResult.dockerVersion,
       status: testResult.success ? ServerStatus.ONLINE : ServerStatus.OFFLINE,
       lastHeartbeatAt: new Date(),
       tags: dto.tags || ['manual', 'ssh'],
+      metadata,
     });
 
     return this.serverRepo.save(server);
@@ -229,6 +312,10 @@ export class ServerService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * Queries real Docker containers and volumes for a server.
+   * NEVER fabricates fake containers or volumes.
+   */
   async getServerDocker(organizationId: string, serverId: string): Promise<{
     installed: boolean;
     running: boolean;
@@ -246,99 +333,64 @@ export class ServerService implements OnApplicationBootstrap {
   }> {
     const server = await this.findOne(organizationId, serverId);
 
-    let coolifyDocker: {
-      containers: Array<{ id: string; name: string; image: string; status: string; ports: string }>;
-      volumes: Array<{ name: string; driver: string; mountpoint?: string }>;
-    } | null = null;
-
+    // If Coolify server, query Coolify API
     if (server.coolifyConnectionId && server.coolifyServerUuid) {
       try {
-        coolifyDocker = await this.coolifyService.getServerDockerInfo(organizationId, server);
+        const coolifyDocker = await this.coolifyService.getServerDockerInfo(organizationId, server);
+        if (coolifyDocker) {
+          return {
+            installed: true,
+            running: true,
+            version: server.dockerVersion || 'Docker Engine (Coolify)',
+            containers: coolifyDocker.containers || [],
+            volumes: (coolifyDocker.volumes || []).map((v) => ({
+              name: v.name,
+              driver: v.driver || 'local',
+              mountpoint: v.mountpoint || `/var/lib/docker/volumes/${v.name}/_data`,
+              project: 'system',
+              sizeBytes: (v as any).sizeBytes,
+            })),
+          };
+        }
       } catch (err: any) {
         this.logger.warn(`Could not query Coolify Docker info for server ${serverId}: ${err.message}`);
       }
     }
 
-    const containers = coolifyDocker?.containers?.length
-      ? coolifyDocker.containers
-      : [
-          {
-            id: 'cnt-pg-01',
-            name: 'postgres-db',
-            image: 'postgres:16-alpine',
-            status: 'running (Up 3 days)',
-            ports: '5432/tcp -> 0.0.0.0:5432',
-          },
-          {
-            id: 'cnt-redis-01',
-            name: 'redis-cache',
-            image: 'redis:7-alpine',
-            status: 'running (Up 3 days)',
-            ports: '6379/tcp',
-          },
-        ];
-
-    const volumeMap = new Map<
-      string,
-      {
-        name: string;
-        driver: string;
-        mountpoint?: string;
-        project?: string;
-        sizeBytes?: number;
-        replicatedAt?: string;
-        sourceServer?: string;
-      }
-    >();
-
-    if (coolifyDocker?.volumes) {
-      for (const v of coolifyDocker.volumes) {
-        volumeMap.set(v.name, {
-          name: v.name,
-          driver: v.driver || 'local',
-          mountpoint: v.mountpoint || `/var/lib/docker/volumes/${v.name}/_data`,
-          project: 'system',
-          sizeBytes: (v as any).sizeBytes || 134217728,
+    // If SSH server with credentials, query real Docker over SSH
+    if (server.credentialId && server.host) {
+      try {
+        const secret = await this.credentialService.decryptSecret(server.credentialId);
+        const dockerInfo = await this.sshProvider.getDockerInfo({
+          host: server.host,
+          port: server.port || 22,
+          username: server.username || secret.username || 'root',
+          password: secret.password,
+          privateKey: secret.privateKey,
+          passphrase: secret.passphrase,
         });
+
+        if (dockerInfo.installed) {
+          return {
+            installed: dockerInfo.installed,
+            running: dockerInfo.running,
+            version: dockerInfo.version || server.dockerVersion,
+            containers: dockerInfo.containers,
+            volumes: dockerInfo.volumes,
+          };
+        }
+      } catch (err: any) {
+        this.logger.warn(`SSH Docker inspection failed for server ${serverId}: ${err.message}`);
       }
     }
 
-    const customVolumes = server.metadata?.volumes || [];
-    for (const cv of customVolumes) {
-      volumeMap.set(cv.name, {
-        name: cv.name,
-        driver: cv.driver || 'local',
-        mountpoint: cv.mountpoint || `/var/lib/docker/volumes/${cv.name}/_data`,
-        project: cv.project || 'replicated',
-        sizeBytes: Number(cv.sizeBytes) || 134217728,
-        replicatedAt: cv.replicatedAt,
-        sourceServer: cv.sourceServer,
-      });
-    }
-
-    if (volumeMap.size === 0) {
-      volumeMap.set('postgres_data', {
-        name: 'postgres_data',
-        driver: 'local',
-        mountpoint: '/var/lib/docker/volumes/postgres_data/_data',
-        project: 'system',
-        sizeBytes: 134217728,
-      });
-      volumeMap.set('redis_data', {
-        name: 'redis_data',
-        driver: 'local',
-        mountpoint: '/var/lib/docker/volumes/redis_data/_data',
-        project: 'system',
-        sizeBytes: 134217728,
-      });
-    }
-
+    // If Docker is not available or inspection failed, return empty lists honestly
     return {
       installed: server.dockerInstalled,
       running: server.status === ServerStatus.ONLINE && server.dockerInstalled,
-      version: server.dockerVersion || 'Docker Engine 24.x',
-      containers,
-      volumes: Array.from(volumeMap.values()),
+      version: server.dockerVersion,
+      containers: [],
+      volumes: [],
     };
   }
 
@@ -354,7 +406,7 @@ export class ServerService implements OnApplicationBootstrap {
       name: volume.name,
       driver: volume.driver || 'local',
       mountpoint: volume.mountpoint || `/var/lib/docker/volumes/${volume.name}/_data`,
-      project: volume.project || 'testing-project',
+      project: volume.project || 'custom',
       addedAt: new Date().toISOString(),
     };
     const existingIdx = volumes.findIndex((v: any) => v.name === volume.name);
@@ -369,32 +421,64 @@ export class ServerService implements OnApplicationBootstrap {
     return newVol;
   }
 
+  /**
+   * Real Filesystem Browsing:
+   * 1. Validates and normalizes paths strictly to prevent directory traversal.
+   * 2. For local servers: queries the local filesystem via Node.js fs.
+   * 3. For SSH servers: authenticates using encrypted credential and executes real SFTP directory listing.
+   * 4. NEVER returns simulated or hardcoded directories.
+   */
   async browseFilesystem(
     organizationId: string,
     serverId: string,
-    path: string = '/',
+    rawPath: string = '/',
   ): Promise<{
     serverId: string;
     serverName: string;
     currentPath: string;
     parentPath: string | null;
-    entries: Array<{
-      name: string;
-      path: string;
-      type: 'directory' | 'file';
-      sizeBytes?: number;
-      modifiedAt?: string;
-      permissions?: string;
-    }>;
+    entries: FilesystemEntry[];
     totalEntries: number;
   }> {
     const server = await this.findOne(organizationId, serverId);
-    const normalizedPath = this.normalizePath(path);
-    const parentPath = normalizedPath === '/' ? null : normalizedPath.split('/').slice(0, -1).join('/') || '/';
+    const normalizedPath = this.sshProvider.normalizePath(rawPath);
+    const parentPath =
+      normalizedPath === '/'
+        ? null
+        : normalizedPath.split('/').slice(0, -1).join('/') || '/';
 
-    // TODO: Replace with real SSH/agent execution when Go agent is available.
-    // For now, return realistic directory listings based on common Linux paths.
-    const entries = this.getSimulatedDirectoryEntries(normalizedPath);
+    const isLocal =
+      !server.host ||
+      server.host === 'localhost' ||
+      server.host === '127.0.0.1' ||
+      !server.credentialId;
+
+    let entries: FilesystemEntry[] = [];
+
+    if (isLocal) {
+      // Real Local Filesystem Browsing
+      entries = await this.browseLocalFilesystem(normalizedPath);
+    } else {
+      // Real Remote SFTP Filesystem Browsing
+      if (!server.credentialId) {
+        throw new BadRequestException(
+          `Filesystem browsing is unavailable: server '${server.name}' does not have credentials configured.`,
+        );
+      }
+
+      const secret = await this.credentialService.decryptSecret(server.credentialId);
+      entries = await this.sshProvider.browseFilesystem(
+        {
+          host: server.host,
+          port: server.port || 22,
+          username: server.username || secret.username || 'root',
+          password: secret.password,
+          privateKey: secret.privateKey,
+          passphrase: secret.passphrase,
+        },
+        normalizedPath,
+      );
+    }
 
     return {
       serverId: server.id,
@@ -406,139 +490,63 @@ export class ServerService implements OnApplicationBootstrap {
     };
   }
 
-  private normalizePath(path: string): string {
-    // Prevent path traversal attacks
-    const cleaned = path
-      .replace(/\\/g, '/')
-      .replace(/\/+/g, '/')
-      .replace(/\.\./g, '');
-    return cleaned.endsWith('/') && cleaned.length > 1
-      ? cleaned.slice(0, -1)
-      : cleaned || '/';
-  }
+  /**
+   * Real Local Filesystem Reader
+   */
+  private async browseLocalFilesystem(normalizedPath: string): Promise<FilesystemEntry[]> {
+    // Resolve path for local operating system
+    const targetDir = path.resolve(normalizedPath);
 
-  private getSimulatedDirectoryEntries(
-    path: string,
-  ): Array<{
-    name: string;
-    path: string;
-    type: 'directory' | 'file';
-    sizeBytes?: number;
-    modifiedAt?: string;
-    permissions?: string;
-  }> {
-    const now = new Date();
-    const ago = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
-
-    const directoryLayouts: Record<
-      string,
-      Array<{
-        name: string;
-        type: 'directory' | 'file';
-        sizeBytes?: number;
-        modifiedAt?: string;
-        permissions?: string;
-      }>
-    > = {
-      '/': [
-        { name: 'bin', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(90) },
-        { name: 'boot', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
-        { name: 'dev', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'etc', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
-        { name: 'home', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: 'opt', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(15) },
-        { name: 'root', type: 'directory', permissions: 'drwx------', modifiedAt: ago(1) },
-        { name: 'srv', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(60) },
-        { name: 'tmp', type: 'directory', permissions: 'drwxrwxrwt', modifiedAt: ago(0) },
-        { name: 'usr', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
-        { name: 'var', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-      ],
-      '/var': [
-        { name: 'backups', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'cache', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'lib', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'log', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'mail', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
-        { name: 'opt', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
-        { name: 'run', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'spool', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
-        { name: 'tmp', type: 'directory', permissions: 'drwxrwxrwt', modifiedAt: ago(0) },
-        { name: 'www', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-      ],
-      '/var/www': [
-        { name: 'app', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: 'html', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(3) },
-        { name: 'api', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: 'staging', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(7) },
-      ],
-      '/var/www/app': [
-        { name: 'current', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'releases', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'shared', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: '.env', type: 'file', sizeBytes: 2048, permissions: '-rw-------', modifiedAt: ago(2) },
-        { name: 'docker-compose.yml', type: 'file', sizeBytes: 1536, permissions: '-rw-r--r--', modifiedAt: ago(3) },
-      ],
-      '/var/lib': [
-        { name: 'docker', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-        { name: 'postgresql', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-        { name: 'mysql', type: 'directory', permissions: 'drwx------', modifiedAt: ago(5) },
-        { name: 'redis', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-      ],
-      '/var/lib/docker': [
-        { name: 'containers', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-        { name: 'image', type: 'directory', permissions: 'drwx------', modifiedAt: ago(1) },
-        { name: 'network', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-        { name: 'overlay2', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-        { name: 'volumes', type: 'directory', permissions: 'drwx------', modifiedAt: ago(0) },
-      ],
-      '/var/backups': [
-        { name: 'daily', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'weekly', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
-        { name: 'monthly', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
-        { name: 'database', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-      ],
-      '/home': [
-        { name: 'ubuntu', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'deploy', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-      ],
-      '/home/ubuntu': [
-        { name: '.ssh', type: 'directory', permissions: 'drwx------', modifiedAt: ago(30) },
-        { name: 'apps', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(2) },
-        { name: 'backups', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-        { name: 'scripts', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
-        { name: '.bashrc', type: 'file', sizeBytes: 3771, permissions: '-rw-r--r--', modifiedAt: ago(60) },
-        { name: '.profile', type: 'file', sizeBytes: 807, permissions: '-rw-r--r--', modifiedAt: ago(60) },
-      ],
-      '/etc': [
-        { name: 'nginx', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
-        { name: 'ssh', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(30) },
-        { name: 'ssl', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(10) },
-        { name: 'systemd', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(20) },
-        { name: 'crontab', type: 'file', sizeBytes: 722, permissions: '-rw-r--r--', modifiedAt: ago(15) },
-        { name: 'fstab', type: 'file', sizeBytes: 604, permissions: '-rw-r--r--', modifiedAt: ago(90) },
-        { name: 'hostname', type: 'file', sizeBytes: 18, permissions: '-rw-r--r--', modifiedAt: ago(120) },
-        { name: 'hosts', type: 'file', sizeBytes: 221, permissions: '-rw-r--r--', modifiedAt: ago(120) },
-      ],
-      '/opt': [
-        { name: 'backupops', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: 'coolify', type: 'directory', permissions: 'drwxr-xr-x', modifiedAt: ago(3) },
-      ],
-    };
-
-    const layout = directoryLayouts[path];
-    if (!layout) {
-      // For unknown paths, return a generic set of placeholder entries
-      return [
-        { name: 'data', type: 'directory' as const, path: `${path}/data`, permissions: 'drwxr-xr-x', modifiedAt: ago(1) },
-        { name: 'config', type: 'directory' as const, path: `${path}/config`, permissions: 'drwxr-xr-x', modifiedAt: ago(5) },
-        { name: 'logs', type: 'directory' as const, path: `${path}/logs`, permissions: 'drwxr-xr-x', modifiedAt: ago(0) },
-      ];
+    if (!fs.existsSync(targetDir)) {
+      throw new NotFoundException(`Local directory not found: ${normalizedPath}`);
     }
 
-    return layout.map((entry) => ({
-      ...entry,
-      path: path === '/' ? `/${entry.name}` : `${path}/${entry.name}`,
-    }));
+    try {
+      const dirEntries = await fs.promises.readdir(targetDir, { withFileTypes: true });
+      const results: FilesystemEntry[] = [];
+
+      for (const entry of dirEntries) {
+        const fullItemPath = path.posix.join(normalizedPath, entry.name);
+        const localItemPath = path.join(targetDir, entry.name);
+        let sizeBytes: number | undefined;
+        let modifiedAt: string | undefined;
+        let permissions: string | undefined;
+
+        try {
+          const stats = fs.statSync(localItemPath);
+          sizeBytes = entry.isFile() ? stats.size : undefined;
+          modifiedAt = stats.mtime.toISOString();
+          permissions = this.formatLocalPermissions(stats.mode, entry.isDirectory());
+        } catch {}
+
+        results.push({
+          name: entry.name,
+          path: fullItemPath,
+          type: entry.isDirectory() ? 'directory' : 'file',
+          sizeBytes,
+          modifiedAt,
+          permissions,
+        });
+      }
+
+      return results;
+    } catch (err: any) {
+      throw new BadRequestException(`Failed to read local filesystem at '${normalizedPath}': ${err.message}`);
+    }
+  }
+
+  private formatLocalPermissions(mode: number, isDirectory: boolean): string {
+    const userRead = mode & 0o400 ? 'r' : '-';
+    const userWrite = mode & 0o200 ? 'w' : '-';
+    const userExec = mode & 0o100 ? 'x' : '-';
+    const groupRead = mode & 0o040 ? 'r' : '-';
+    const groupWrite = mode & 0o020 ? 'w' : '-';
+    const groupExec = mode & 0o010 ? 'x' : '-';
+    const otherRead = mode & 0o004 ? 'r' : '-';
+    const otherWrite = mode & 0o002 ? 'w' : '-';
+    const otherExec = mode & 0o001 ? 'x' : '-';
+
+    return `${isDirectory ? 'd' : '-'}${userRead}${userWrite}${userExec}${groupRead}${groupWrite}${groupExec}${otherRead}${otherWrite}${otherExec}`;
   }
 
   async remove(organizationId: string, id: string): Promise<void> {
