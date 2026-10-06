@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowRight,
   ArrowUpDown,
@@ -19,6 +19,8 @@ import {
   Activity,
   Layers,
   FolderOpen,
+  Check,
+  Search,
 } from 'lucide-react';
 import { Server } from '../types';
 import * as api from '../services/api';
@@ -28,15 +30,6 @@ import { FilterBar } from '../components/common/FilterBar';
 import { LogViewer } from '../components/common/LogViewer';
 import { TableSkeleton, MetricCardsSkeleton } from '../components/common/Skeleton';
 import { FilesystemBrowser } from '../components/common/FilesystemBrowser';
-
-const COMMON_PATHS = [
-  { label: '/var/www', path: '/var/www' },
-  { label: '/home', path: '/home' },
-  { label: '/etc', path: '/etc' },
-  { label: '/opt', path: '/opt' },
-  { label: 'Docker Volumes', path: '/var/lib/docker/volumes' },
-  { label: '/data', path: '/data' },
-];
 
 interface TransfersViewProps {
   servers?: Server[];
@@ -54,15 +47,19 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
   // New Transfer Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
   const [sourceServerId, setSourceServerId] = useState<string>('');
-  const [sourcePath, setSourcePath] = useState<string>('/var/www/app');
+  const [sourcePath, setSourcePath] = useState<string>('');
   const [destinationServerId, setDestinationServerId] = useState<string>('');
-  const [destinationPath, setDestinationPath] = useState<string>('/var/www/app');
-  const [mode, setMode] = useState<'copy' | 'move'>('move');
+  const [destinationPath, setDestinationPath] = useState<string>('');
+  const [mode, setMode] = useState<'copy' | 'move'>('copy');
   const [verifyChecksum, setVerifyChecksum] = useState<boolean>(true);
   const [confirmMove, setConfirmMove] = useState<boolean>(false);
   const [starting, setStarting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [browsingTarget, setBrowsingTarget] = useState<'source' | 'destination' | null>(null);
+
+  // Pre-flight check state
+  const [preflightResult, setPreflightResult] = useState<api.PreflightResult | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState<boolean>(false);
 
   const loadData = async () => {
     try {
@@ -102,6 +99,58 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
     }
   }, [transfers]);
 
+  // Handle source server change (resets source path)
+  const handleSourceServerChange = (newServerId: string) => {
+    setSourceServerId(newServerId);
+    setSourcePath('');
+    setPreflightResult(null);
+  };
+
+  // Handle destination server change (resets destination path)
+  const handleDestinationServerChange = (newServerId: string) => {
+    setDestinationServerId(newServerId);
+    setDestinationPath('');
+    setPreflightResult(null);
+  };
+
+  // Run real Pre-flight validation
+  const runPreflightCheck = useCallback(async () => {
+    if (!sourcePath || !destinationPath) {
+      return;
+    }
+    setPreflightLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await api.preflightTransfer({
+        sourceServerId: sourceServerId || undefined,
+        sourcePath,
+        destinationServerId: destinationServerId || undefined,
+        destinationPath,
+      });
+      setPreflightResult(res);
+      if (!res.canTransfer && res.errors.length > 0) {
+        setErrorMessage(res.errors.join('; '));
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Pre-flight validation failed');
+      setPreflightResult(null);
+    } finally {
+      setPreflightLoading(false);
+    }
+  }, [sourceServerId, sourcePath, destinationServerId, destinationPath]);
+
+  // Trigger preflight when both paths are defined
+  useEffect(() => {
+    if (sourcePath && destinationPath && showModal) {
+      const t = setTimeout(() => {
+        runPreflightCheck();
+      }, 400);
+      return () => clearTimeout(t);
+    } else {
+      setPreflightResult(null);
+    }
+  }, [sourcePath, destinationPath, sourceServerId, destinationServerId, showModal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeCount = transfers.filter(
     (t) => t.state === 'running' || t.state === 'planning' || t.state === 'verifying',
   ).length;
@@ -120,8 +169,8 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
         const q = searchQuery.toLowerCase();
         return (
           t.id.toLowerCase().includes(q) ||
-          t.sourcePath.toLowerCase().includes(q) ||
-          t.destinationPath.toLowerCase().includes(q) ||
+          (t.sourcePath && t.sourcePath.toLowerCase().includes(q)) ||
+          (t.destinationPath && t.destinationPath.toLowerCase().includes(q)) ||
           (t.sourceServerName && t.sourceServerName.toLowerCase().includes(q)) ||
           (t.destinationServerName && t.destinationServerName.toLowerCase().includes(q))
         );
@@ -133,7 +182,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
   const handleStartTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourcePath || !destinationPath) {
-      setErrorMessage('Source and Destination paths are required');
+      setErrorMessage('Please select both Source and Destination directories.');
       return;
     }
     if (mode === 'move' && !confirmMove) {
@@ -155,6 +204,9 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
       });
       setShowModal(false);
       setConfirmMove(false);
+      setSourcePath('');
+      setDestinationPath('');
+      setPreflightResult(null);
       loadData();
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to start transfer');
@@ -209,12 +261,12 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
   const formatSpeed = (bytesPerSec?: number) => {
     if (!bytesPerSec || bytesPerSec === 0) return '0 MB/s';
-    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(2)} MB/s`;
   };
 
   const formatEta = (seconds?: number) => {
@@ -243,6 +295,9 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
     }
   };
 
+  const selectedSourceServer = servers.find((s) => s.id === sourceServerId);
+  const selectedDestServer = servers.find((s) => s.id === destinationServerId);
+
   if (loading && transfers.length === 0) {
     return (
       <div className="space-y-4 animate-in fade-in duration-150">
@@ -261,7 +316,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
             Data Movement &amp; Server Transfers
           </h2>
           <p className="text-xs text-text-muted mt-0.5">
-            Reliable, resumable, checksum-verified server-to-server copy and move operations.
+            Real, authenticated, stream-piped server-to-server data movement with live SHA-256 verification.
           </p>
         </div>
 
@@ -276,7 +331,13 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setSourcePath('');
+              setDestinationPath('');
+              setPreflightResult(null);
+              setErrorMessage(null);
+              setShowModal(true);
+            }}
             className="op-btn-primary"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -342,11 +403,16 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
           title="No transfers found"
           description={
             transfers.length === 0
-              ? 'No server-to-server or data movement jobs have been started. Click "New Transfer" to move or copy directories.'
+              ? 'No server-to-server data movement operations have been registered. Click "New Transfer" to move or copy directories.'
               : 'No transfers match the selected filter.'
           }
           actionText="Start Transfer"
-          onAction={() => setShowModal(true)}
+          onAction={() => {
+            setSourcePath('');
+            setDestinationPath('');
+            setPreflightResult(null);
+            setShowModal(true);
+          }}
         />
       ) : (
         <div className="op-card overflow-hidden">
@@ -521,16 +587,18 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
         </div>
       )}
 
-      {/* New Transfer Wizard Modal (Use Case B) */}
+      {/* New Transfer Wizard Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="op-card-elevated max-w-xl w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150">
+          <div className="op-card-elevated max-w-2xl w-full p-5 space-y-4 shadow-2xl border-border animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="w-4 h-4 text-brand-primary" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-md bg-brand-primary/10 border border-brand-primary/30 flex items-center justify-center">
+                  <ArrowUpDown className="w-4 h-4 text-brand-primary" />
+                </div>
                 <div>
                   <h3 className="font-semibold text-sm text-text-primary">Server-to-Server Data Movement</h3>
-                  <p className="text-[11px] text-text-muted">Direct transfer with streaming rate control and SHA-256 verification.</p>
+                  <p className="text-[11px] text-text-muted">Real streaming data transfer with rate control and SHA-256 verification.</p>
                 </div>
               </div>
               <button
@@ -542,42 +610,53 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
             </div>
 
             {errorMessage && (
-              <div className="p-2.5 rounded bg-error/10 border border-error/30 text-error text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMessage}</span>
+              <div className="p-3 rounded bg-error/10 border border-error/30 text-error text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-semibold block">Validation Error</span>
+                  <span>{errorMessage}</span>
+                </div>
               </div>
             )}
 
             <form onSubmit={handleStartTransfer} className="space-y-4 text-xs">
-              {/* Step 1 & 2: Source */}
-              <div className="p-3 rounded bg-surface-secondary border border-border space-y-2.5">
-                <div className="text-[11px] font-semibold text-brand-primary uppercase tracking-wider font-mono">
-                  1. Source Location
+              {/* Step 1: Source */}
+              <div className="p-3.5 rounded bg-surface-secondary/50 border border-border space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold text-brand-primary uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <span>1. Source Server &amp; Directory</span>
+                  </div>
+                  {selectedSourceServer && (
+                    <span className="text-[10px] text-text-muted font-mono">
+                      {selectedSourceServer.host} · {selectedSourceServer.os || 'Linux'}
+                    </span>
+                  )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-text-secondary mb-1">Source Server</label>
+                    <label className="block text-text-secondary mb-1 font-medium">Source Server</label>
                     <select
                       value={sourceServerId}
-                      onChange={(e) => setSourceServerId(e.target.value)}
+                      onChange={(e) => handleSourceServerChange(e.target.value)}
                       className="op-input"
                     >
                       {servers.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.host})
+                          {s.name} ({s.host}:{s.port || 22})
                         </option>
                       ))}
                       {servers.length === 0 && <option value="">Local Host</option>}
                     </select>
                   </div>
+
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-text-secondary">Source Path / Directory</label>
+                      <label className="block text-text-secondary font-medium">Source Directory</label>
                       <button
                         type="button"
                         onClick={() => setBrowsingTarget('source')}
-                        disabled={!sourceServerId}
-                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-40 disabled:hover:no-underline"
+                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium"
                       >
                         <FolderOpen className="w-3 h-3" />
                         <span>Browse Server</span>
@@ -588,14 +667,16 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                         type="text"
                         required
                         value={sourcePath}
-                        onChange={(e) => setSourcePath(e.target.value)}
-                        placeholder="/var/www/app"
-                        className="op-input font-mono flex-1"
+                        onChange={(e) => {
+                          setSourcePath(e.target.value);
+                          setPreflightResult(null);
+                        }}
+                        placeholder="No directory selected"
+                        className="op-input font-mono flex-1 text-xs"
                       />
                       <button
                         type="button"
                         onClick={() => setBrowsingTarget('source')}
-                        disabled={!sourceServerId}
                         className="op-btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1 shrink-0"
                         title="Browse Server Filesystem"
                       >
@@ -603,56 +684,47 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                         <span className="hidden sm:inline">Browse</span>
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      <span className="text-[10px] text-text-muted self-center mr-0.5">Presets:</span>
-                      {COMMON_PATHS.map((preset) => (
-                        <button
-                          key={preset.path}
-                          type="button"
-                          onClick={() => setSourcePath(preset.path)}
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
-                            sourcePath === preset.path
-                              ? 'bg-brand-primary/10 border-brand-primary/40 text-brand-primary font-semibold'
-                              : 'bg-surface-primary border-border text-text-muted hover:text-text-secondary hover:border-border-strong'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Step 3 & 4: Destination */}
-              <div className="p-3 rounded bg-surface-secondary border border-border space-y-2.5">
-                <div className="text-[11px] font-semibold text-brand-primary uppercase tracking-wider font-mono">
-                  2. Destination Location
+              {/* Step 2: Destination */}
+              <div className="p-3.5 rounded bg-surface-secondary/50 border border-border space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold text-brand-primary uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <span>2. Destination Server &amp; Directory</span>
+                  </div>
+                  {selectedDestServer && (
+                    <span className="text-[10px] text-text-muted font-mono">
+                      {selectedDestServer.host} · {selectedDestServer.os || 'Linux'}
+                    </span>
+                  )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-text-secondary mb-1">Destination Server</label>
+                    <label className="block text-text-secondary mb-1 font-medium">Destination Server</label>
                     <select
                       value={destinationServerId}
-                      onChange={(e) => setDestinationServerId(e.target.value)}
+                      onChange={(e) => handleDestinationServerChange(e.target.value)}
                       className="op-input"
                     >
                       {servers.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.host})
+                          {s.name} ({s.host}:{s.port || 22})
                         </option>
                       ))}
                       {servers.length === 0 && <option value="">Local Host</option>}
                     </select>
                   </div>
+
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-text-secondary">Destination Path / Directory</label>
+                      <label className="block text-text-secondary font-medium">Destination Directory</label>
                       <button
                         type="button"
                         onClick={() => setBrowsingTarget('destination')}
-                        disabled={!destinationServerId}
-                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-40 disabled:hover:no-underline"
+                        className="text-[11px] text-brand-primary hover:underline flex items-center gap-1 font-medium"
                       >
                         <FolderOpen className="w-3 h-3" />
                         <span>Browse Server</span>
@@ -663,14 +735,16 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                         type="text"
                         required
                         value={destinationPath}
-                        onChange={(e) => setDestinationPath(e.target.value)}
-                        placeholder="/var/www/app"
-                        className="op-input font-mono flex-1"
+                        onChange={(e) => {
+                          setDestinationPath(e.target.value);
+                          setPreflightResult(null);
+                        }}
+                        placeholder="No directory selected"
+                        className="op-input font-mono flex-1 text-xs"
                       />
                       <button
                         type="button"
                         onClick={() => setBrowsingTarget('destination')}
-                        disabled={!destinationServerId}
                         className="op-btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1 shrink-0"
                         title="Browse Destination Server Filesystem"
                       >
@@ -678,28 +752,83 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                         <span className="hidden sm:inline">Browse</span>
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      <span className="text-[10px] text-text-muted self-center mr-0.5">Presets:</span>
-                      {COMMON_PATHS.map((preset) => (
-                        <button
-                          key={preset.path}
-                          type="button"
-                          onClick={() => setDestinationPath(preset.path)}
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
-                            destinationPath === preset.path
-                              ? 'bg-brand-primary/10 border-brand-primary/40 text-brand-primary font-semibold'
-                              : 'bg-surface-primary border-border text-text-muted hover:text-text-secondary hover:border-border-strong'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Step 5: Transfer Mode & Verification */}
+              {/* Pre-flight Check Display */}
+              {preflightLoading && (
+                <div className="p-3 rounded bg-surface-secondary border border-border flex items-center gap-2 text-text-muted">
+                  <RefreshCw className="w-4 h-4 animate-spin text-brand-primary" />
+                  <span>Running live pre-flight inspection (discovering files &amp; checking destination capacity)...</span>
+                </div>
+              )}
+
+              {preflightResult && !preflightLoading && (
+                <div
+                  className={`p-3.5 rounded border space-y-2 animate-in fade-in duration-150 ${
+                    preflightResult.canTransfer
+                      ? 'bg-success/5 border-success/30'
+                      : 'bg-error/5 border-error/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-xs font-semibold flex items-center gap-1.5 ${
+                        preflightResult.canTransfer ? 'text-success' : 'text-error'
+                      }`}
+                    >
+                      {preflightResult.canTransfer ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4" />
+                      )}
+                      <span>Pre-flight Inspection: {preflightResult.canTransfer ? 'Ready for Transfer' : 'Action Required'}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={runPreflightCheck}
+                      className="text-[11px] text-text-muted hover:text-text-primary underline flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Re-check</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-[11px] font-mono pt-1">
+                    <div className="bg-surface-primary/60 p-2 rounded border border-border space-y-0.5">
+                      <span className="text-text-muted block text-[10px]">SOURCE DATA INVENTORY</span>
+                      <div className="text-text-primary font-semibold">
+                        {preflightResult.source.totalFiles} files · {formatBytes(preflightResult.source.totalBytes)}
+                      </div>
+                      <div className="text-[10px] text-text-muted truncate">
+                        {preflightResult.source.serverName}:{preflightResult.source.path}
+                      </div>
+                    </div>
+
+                    <div className="bg-surface-primary/60 p-2 rounded border border-border space-y-0.5">
+                      <span className="text-text-muted block text-[10px]">DESTINATION CAPACITY</span>
+                      <div className="text-text-primary font-semibold">
+                        {preflightResult.destination.availableBytes
+                          ? `${formatBytes(preflightResult.destination.availableBytes)} available`
+                          : 'Writable'}
+                      </div>
+                      <div className="text-[10px] text-text-muted truncate">
+                        {preflightResult.destination.serverName}:{preflightResult.destination.path}
+                      </div>
+                    </div>
+                  </div>
+
+                  {preflightResult.warnings && preflightResult.warnings.length > 0 && (
+                    <div className="text-[11px] text-warning flex items-center gap-1 pt-1">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{preflightResult.warnings.join(' ')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Transfer Mode & Checksum */}
               <div className="space-y-2">
                 <label className="block text-text-secondary font-medium">Operation Mode</label>
                 <div className="grid grid-cols-2 gap-2.5">
@@ -716,7 +845,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                       {mode === 'copy' && <CheckCircle2 className="w-3.5 h-3.5 text-info" />}
                     </div>
                     <p className="text-[11px] text-text-muted mt-1 leading-normal">
-                      Transfers data to destination. Source directory remains untouched.
+                      Streams data to destination. Source directory remains completely untouched.
                     </p>
                   </div>
 
@@ -733,7 +862,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                       {mode === 'move' && <CheckCircle2 className="w-3.5 h-3.5 text-brand-primary" />}
                     </div>
                     <p className="text-[11px] text-text-muted mt-1 leading-normal">
-                      Transfers, verifies checksum, then safely removes source only after verified match.
+                      Streams, verifies destination SHA-256 match, and only then safely deletes source files.
                     </p>
                   </div>
                 </div>
@@ -771,7 +900,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                       className="rounded border-border text-warning focus:ring-warning mt-0.5"
                     />
                     <span className="text-[11px] text-text-primary font-medium">
-                      I understand and confirm that source files will be deleted upon successful destination verification.
+                      I understand and confirm that source files will be removed only upon verified destination match.
                     </span>
                   </label>
                 </div>
@@ -787,10 +916,20 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
                 </button>
                 <button
                   type="submit"
-                  disabled={starting || (mode === 'move' && !confirmMove)}
+                  disabled={
+                    starting ||
+                    !sourcePath ||
+                    !destinationPath ||
+                    (preflightResult !== null && !preflightResult.canTransfer) ||
+                    (mode === 'move' && !confirmMove)
+                  }
                   className="op-btn-primary"
                 >
-                  {starting ? 'Initiating Transfer...' : 'Start Transfer'}
+                  {starting
+                    ? 'Initiating Transfer...'
+                    : mode === 'move'
+                    ? 'Start Move Operation'
+                    : 'Start Copy Operation'}
                 </button>
               </div>
             </form>
@@ -873,6 +1012,11 @@ export const TransfersView: React.FC<TransfersViewProps> = ({ servers: propServe
       {browsingTarget && (
         <FilesystemBrowser
           serverId={browsingTarget === 'source' ? sourceServerId : destinationServerId}
+          server={
+            browsingTarget === 'source'
+              ? servers.find((s) => s.id === sourceServerId)
+              : servers.find((s) => s.id === destinationServerId)
+          }
           initialPath={browsingTarget === 'source' ? sourcePath : destinationPath}
           title={
             browsingTarget === 'source'

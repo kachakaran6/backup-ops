@@ -860,7 +860,7 @@ export const DockerView: React.FC = () => {
                       onChange={(e) => setReplicateModal((prev) => ({ ...prev, dryRun: e.target.checked }))}
                       className="rounded border-border"
                     />
-                    <span className="text-text-secondary text-xs">Dry-run (simulate transfer without writing data)</span>
+                    <span className="text-text-secondary text-xs">Dry-run (validate transfer path without writing data)</span>
                   </label>
                 </div>
 

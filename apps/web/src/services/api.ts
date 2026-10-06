@@ -692,6 +692,53 @@ export async function cancelJob(id: string): Promise<void> {
 }
 
 // Transfers API (Server-to-Server and Data Movement)
+export interface PreflightTransferRequest {
+  sourceServerId?: string;
+  sourcePath: string;
+  destinationServerId?: string;
+  destinationPath: string;
+}
+
+export interface PreflightResult {
+  ok: boolean;
+  canTransfer: boolean;
+  source: {
+    serverId?: string;
+    serverName: string;
+    path: string;
+    exists: boolean;
+    readable: boolean;
+    isDirectory: boolean;
+    totalBytes: number;
+    totalFiles: number;
+  };
+  destination: {
+    serverId?: string;
+    serverName: string;
+    path: string;
+    exists: boolean;
+    writable: boolean;
+    availableBytes?: number;
+    enoughSpace: boolean;
+  };
+  errors: string[];
+  warnings: string[];
+}
+
+export async function preflightTransfer(data: PreflightTransferRequest): Promise<PreflightResult> {
+  const res = await authFetch(`${API_BASE}/transfers/preflight?organizationId=default`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: `Preflight check failed (${res.status})` }));
+    const errorMsg = Array.isArray(err.message) ? err.message.join(', ') : err.message || `Preflight check failed (${res.status})`;
+    throw new Error(errorMsg);
+  }
+  return await res.json();
+}
+
 export async function fetchTransfers(status?: string): Promise<any[]> {
   try {
     const url = status && status !== 'all'
@@ -743,6 +790,7 @@ export async function retryTransfer(id: string): Promise<void> {
 }
 
 export async function saveNotificationRule(eventOrData: any, data?: any): Promise<NotificationRule | null> {
+
   try {
     const event = typeof eventOrData === 'string' ? eventOrData : eventOrData?.event;
     const body = typeof eventOrData === 'string' ? { ...data, event } : eventOrData;
