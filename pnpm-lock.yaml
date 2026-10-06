@@ -80,6 +80,9 @@ importers:
       redis:
         specifier: ^4.6.9
         version: 4.7.1
+      ssh2:
+        specifier: ^1.17.0
+        version: 1.17.0
       typeorm:
         specifier: ^0.3.17
         version: 0.3.31(ioredis@5.11.1)(pg@8.23.0)(redis@4.7.1)(ts-node@10.9.2(@swc/core@1.16.2)(@types/node@20.19.43)(typescript@5.9.3))
@@ -111,6 +114,9 @@ importers:
       '@types/passport-jwt':
         specifier: ^4.0.0
         version: 4.0.1
+      '@types/ssh2':
+        specifier: ^1.15.6
+        version: 1.15.6
       '@types/uuid':
         specifier: ^9.0.7
         version: 9.0.8
