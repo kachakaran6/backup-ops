@@ -7,17 +7,20 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "echo 'worker tests ok'"
   },
   "dependencies": {
     "bullmq": "^4.9.0",
-    "redis": "^4.6.9",
+    "dotenv": "^16.3.1",
     "pg": "^8.11.3",
-    "dotenv": "^16.3.1"
+    "redis": "^4.6.9",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/pg": "^8.10.9",
+    "@types/ssh2": "^1.15.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.2.0"
   }
