@@ -2,11 +2,41 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { URL } from 'url';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Job, JobState } from '../job/entities/job.entity';
 import { Server } from '../server/entities/server.entity';
-import { CreateTransferDto } from './dto/create-transfer.dto';
+import { CreateTransferDto, PreflightTransferDto } from './dto/create-transfer.dto';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { CredentialService } from '../credential/credential.service';
+import { SshProviderService } from '../server/ssh-provider.service';
+
+export interface PreflightResult {
+  ok: boolean;
+  canTransfer: boolean;
+  source: {
+    serverId?: string;
+    serverName: string;
+    path: string;
+    exists: boolean;
+    readable: boolean;
+    isDirectory: boolean;
+    totalBytes: number;
+    totalFiles: number;
+  };
+  destination: {
+    serverId?: string;
+    serverName: string;
+    path: string;
+    exists: boolean;
+    writable: boolean;
+    availableBytes?: number;
+    enoughSpace: boolean;
+  };
+  errors: string[];
+  warnings: string[];
+}
 
 @Injectable()
 export class TransferService {
@@ -19,6 +49,8 @@ export class TransferService {
     @InjectRepository(Server)
     private serverRepo: Repository<Server>,
     private configService: ConfigService,
+    private credentialService: CredentialService,
+    private sshProvider: SshProviderService,
   ) {
     const redisUrl = this.configService.get<string>('REDIS_URL');
     try {
@@ -46,29 +78,275 @@ export class TransferService {
     }
   }
 
+  /**
+   * Real Pre-flight transfer inspection:
+   * Validates reachability, path existence, file count, total bytes, and destination disk capacity.
+   */
+  async preflight(organizationId: string, dto: PreflightTransferDto): Promise<PreflightResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    let sourceServerName = 'Local Host';
+    let destServerName = 'Local Host';
+
+    let sourceServer: Server | null = null;
+    let destServer: Server | null = null;
+
+    if (dto.sourceServerId) {
+      sourceServer = await this.serverRepo.findOne({ where: { id: dto.sourceServerId, organizationId } });
+      if (!sourceServer) {
+        errors.push(`Source server '${dto.sourceServerId}' not found in organization.`);
+      } else {
+        sourceServerName = sourceServer.name;
+      }
+    }
+
+    if (dto.destinationServerId) {
+      destServer = await this.serverRepo.findOne({ where: { id: dto.destinationServerId, organizationId } });
+      if (!destServer) {
+        errors.push(`Destination server '${dto.destinationServerId}' not found in organization.`);
+      } else {
+        destServerName = destServer.name;
+      }
+    }
+
+    // 1. Inspect Source
+    let sourceExists = false;
+    let sourceReadable = false;
+    let sourceIsDir = false;
+    let sourceTotalBytes = 0;
+    let sourceTotalFiles = 0;
+
+    const normalizedSourcePath = this.sshProvider.normalizePath(dto.sourcePath);
+
+    const isSourceLocal =
+      !sourceServer ||
+      !sourceServer.host ||
+      sourceServer.host === 'localhost' ||
+      sourceServer.host === '127.0.0.1' ||
+      !sourceServer.credentialId;
+
+    if (isSourceLocal) {
+      const localSourcePath = path.resolve(normalizedSourcePath);
+      if (fs.existsSync(localSourcePath)) {
+        sourceExists = true;
+        try {
+          fs.accessSync(localSourcePath, fs.constants.R_OK);
+          sourceReadable = true;
+          const stat = fs.statSync(localSourcePath);
+          sourceIsDir = stat.isDirectory();
+
+          if (sourceIsDir) {
+            const scan = this.scanLocalDirectory(localSourcePath);
+            sourceTotalBytes = scan.totalBytes;
+            sourceTotalFiles = scan.totalFiles;
+          } else {
+            sourceTotalBytes = stat.size;
+            sourceTotalFiles = 1;
+          }
+        } catch (err: any) {
+          errors.push(`Source path '${normalizedSourcePath}' is not readable: ${err.message}`);
+        }
+      } else {
+        errors.push(`Source path '${normalizedSourcePath}' does not exist on ${sourceServerName}.`);
+      }
+    } else {
+      // Remote SSH Source
+      try {
+        const secret = await this.credentialService.decryptSecret(sourceServer!.credentialId!);
+        const sshCfg = {
+          host: sourceServer!.host,
+          port: sourceServer!.port || 22,
+          username: sourceServer!.username || secret.username || 'root',
+          password: secret.password,
+          privateKey: secret.privateKey,
+          passphrase: secret.passphrase,
+        };
+
+        const cap = await this.sshProvider.checkPathCapacity(sshCfg, normalizedSourcePath);
+        sourceExists = cap.exists;
+        sourceReadable = cap.readable;
+        sourceIsDir = cap.isDirectory;
+
+        if (!sourceExists) {
+          errors.push(`Source path '${normalizedSourcePath}' does not exist on ${sourceServerName}.`);
+        } else if (!sourceReadable) {
+          errors.push(`Source path '${normalizedSourcePath}' is not readable on ${sourceServerName}.`);
+        } else if (sourceIsDir) {
+          const scan = await this.sshProvider.scanRemoteDirectory(sshCfg, normalizedSourcePath);
+          sourceTotalBytes = scan.totalBytes;
+          sourceTotalFiles = scan.totalFiles;
+        } else {
+          sourceTotalFiles = 1;
+          sourceTotalBytes = cap.totalBytes || 0;
+        }
+      } catch (err: any) {
+        errors.push(`Could not connect to source server '${sourceServerName}': ${err.message}`);
+      }
+    }
+
+    // 2. Inspect Destination
+    let destExists = false;
+    let destWritable = false;
+    let destAvailableBytes: number | undefined;
+
+    const normalizedDestPath = this.sshProvider.normalizePath(dto.destinationPath);
+
+    const isDestLocal =
+      !destServer ||
+      !destServer.host ||
+      destServer.host === 'localhost' ||
+      destServer.host === '127.0.0.1' ||
+      !destServer.credentialId;
+
+    if (isDestLocal) {
+      const localDestPath = path.resolve(normalizedDestPath);
+      destExists = fs.existsSync(localDestPath);
+      const testDir = destExists ? localDestPath : path.dirname(localDestPath);
+
+      if (fs.existsSync(testDir)) {
+        try {
+          fs.accessSync(testDir, fs.constants.W_OK);
+          destWritable = true;
+          if (typeof (fs as any).statfsSync === 'function') {
+            const stats = (fs as any).statfsSync(testDir);
+            destAvailableBytes = Number(stats.bavail) * Number(stats.bsize);
+          }
+        } catch (err: any) {
+          errors.push(`Destination directory '${testDir}' is not writable: ${err.message}`);
+        }
+      } else {
+        errors.push(`Parent destination directory '${testDir}' does not exist.`);
+      }
+    } else {
+      // Remote SSH Destination
+      try {
+        const secret = await this.credentialService.decryptSecret(destServer!.credentialId!);
+        const sshCfg = {
+          host: destServer!.host,
+          port: destServer!.port || 22,
+          username: destServer!.username || secret.username || 'root',
+          password: secret.password,
+          privateKey: secret.privateKey,
+          passphrase: secret.passphrase,
+        };
+
+        const cap = await this.sshProvider.checkPathCapacity(sshCfg, normalizedDestPath);
+        destExists = cap.exists;
+        destWritable = cap.writable;
+        destAvailableBytes = cap.availableBytes;
+
+        if (!destWritable && !destExists) {
+          // Check parent directory writability
+          const parentCap = await this.sshProvider.checkPathCapacity(sshCfg, path.posix.dirname(normalizedDestPath));
+          destWritable = parentCap.writable;
+          destAvailableBytes = parentCap.availableBytes;
+        }
+
+        if (!destWritable) {
+          errors.push(`Destination path '${normalizedDestPath}' is not writable on ${destServerName}.`);
+        }
+      } catch (err: any) {
+        errors.push(`Could not connect to destination server '${destServerName}': ${err.message}`);
+      }
+    }
+
+    // 3. Storage Space Check
+    let enoughSpace = true;
+    if (destAvailableBytes !== undefined && sourceTotalBytes > 0) {
+      if (destAvailableBytes < sourceTotalBytes) {
+        enoughSpace = false;
+        errors.push(
+          `Insufficient space on destination: required ${(sourceTotalBytes / (1024 * 1024)).toFixed(1)} MB, but only ${(destAvailableBytes / (1024 * 1024)).toFixed(1)} MB available.`,
+        );
+      } else if (destAvailableBytes < sourceTotalBytes * 1.1) {
+        warnings.push('Destination storage capacity is close to source size (<10% buffer remaining).');
+      }
+    }
+
+    const canTransfer = errors.length === 0 && sourceExists && sourceReadable && destWritable && enoughSpace;
+
+    return {
+      ok: errors.length === 0,
+      canTransfer,
+      source: {
+        serverId: dto.sourceServerId,
+        serverName: sourceServerName,
+        path: normalizedSourcePath,
+        exists: sourceExists,
+        readable: sourceReadable,
+        isDirectory: sourceIsDir,
+        totalBytes: sourceTotalBytes,
+        totalFiles: sourceTotalFiles,
+      },
+      destination: {
+        serverId: dto.destinationServerId,
+        serverName: destServerName,
+        path: normalizedDestPath,
+        exists: destExists,
+        writable: destWritable,
+        availableBytes: destAvailableBytes,
+        enoughSpace,
+      },
+      errors,
+      warnings,
+    };
+  }
+
+  /**
+   * Scans a local directory recursively for real file count and total size.
+   */
+  private scanLocalDirectory(dirPath: string): { totalBytes: number; totalFiles: number } {
+    let totalBytes = 0;
+    let totalFiles = 0;
+
+    const walk = (current: string) => {
+      try {
+        const entries = fs.readdirSync(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          if (entry.isDirectory()) {
+            walk(full);
+          } else if (entry.isFile()) {
+            const st = fs.statSync(full);
+            totalBytes += st.size;
+            totalFiles += 1;
+          }
+        }
+      } catch {}
+    };
+
+    walk(dirPath);
+    return { totalBytes, totalFiles };
+  }
+
   async create(organizationId: string, dto: CreateTransferDto): Promise<Job> {
     // Destructive safeguard: MOVE requires explicit confirmation
     if (dto.mode === 'move' && !dto.confirmDestructiveMove) {
       throw new BadRequestException('Destructive operation safeguard: Move requires explicit operator confirmation.');
     }
 
-    let sourceServerName = 'Local Host';
-    if (dto.sourceServerId) {
-      const src = await this.serverRepo.findOne({ where: { id: dto.sourceServerId } });
-      if (src) sourceServerName = src.name;
+    // Execute real pre-flight validation
+    const preflightRes = await this.preflight(organizationId, {
+      sourceServerId: dto.sourceServerId,
+      sourcePath: dto.sourcePath,
+      destinationServerId: dto.destinationServerId,
+      destinationPath: dto.destinationPath,
+    });
+
+    if (!preflightRes.canTransfer) {
+      const errorSummary = preflightRes.errors.join('; ') || 'Pre-flight check failed for the requested transfer.';
+      throw new BadRequestException(`Cannot initiate transfer: ${errorSummary}`);
     }
 
-    let destinationServerName = 'Local Host';
-    if (dto.destinationServerId) {
-      const dest = await this.serverRepo.findOne({ where: { id: dto.destinationServerId } });
-      if (dest) destinationServerName = dest.name;
-    }
-
-    const estimatedBytes = 18.2 * 1024 * 1024 * 1024; // 18.2 GB sample/estimated baseline
+    const sourceServerName = preflightRes.source.serverName;
+    const destinationServerName = preflightRes.destination.serverName;
+    const realTotalBytes = preflightRes.source.totalBytes;
+    const realTotalFiles = preflightRes.source.totalFiles;
 
     const steps = [
-      { id: '1', name: 'Pre-flight connection and path validation', status: 'pending' as const },
-      { id: '2', name: 'Source directory scan and file inventory', status: 'pending' as const },
+      { id: '1', name: 'Pre-flight connection and path validation', status: 'completed' as const },
+      { id: '2', name: 'Source directory scan and file inventory', status: 'completed' as const },
       { id: '3', name: 'Streaming transfer with rate control', status: 'pending' as const },
       { id: '4', name: 'SHA-256 destination checksum verification', status: 'pending' as const },
       {
@@ -81,7 +359,7 @@ export class TransferService {
     const initialLog = {
       timestamp: new Date().toISOString(),
       level: 'info' as const,
-      message: `${dto.mode.toUpperCase()} transfer requested: ${sourceServerName}:${dto.sourcePath} → ${destinationServerName}:${dto.destinationPath}`,
+      message: `${dto.mode.toUpperCase()} transfer requested: ${sourceServerName}:${preflightRes.source.path} → ${destinationServerName}:${preflightRes.destination.path} (${(realTotalBytes / (1024 * 1024)).toFixed(1)} MB, ${realTotalFiles} files).`,
     };
 
     const job = this.jobRepo.create({
@@ -93,22 +371,24 @@ export class TransferService {
       progress: {
         percentage: 0,
         bytesProcessed: 0,
-        totalBytes: estimatedBytes,
+        totalBytes: realTotalBytes,
         filesProcessed: 0,
-        totalFiles: 142,
+        totalFiles: realTotalFiles,
         currentStep: 'Queued in transfer orchestrator',
         transferSpeedBytesPerSec: 0,
         etaSeconds: 0,
       },
       options: {
         mode: dto.mode,
-        sourcePath: dto.sourcePath,
-        destinationPath: dto.destinationPath,
+        sourcePath: preflightRes.source.path,
+        destinationPath: preflightRes.destination.path,
         sourceServerName,
         destinationServerName,
         verifyChecksum: dto.verifyChecksum !== false,
         confirmDestructiveMove: dto.confirmDestructiveMove,
         checksumAlgorithm: 'SHA-256',
+        totalBytes: realTotalBytes,
+        totalFiles: realTotalFiles,
         ...dto.options,
       },
       steps,
@@ -118,29 +398,40 @@ export class TransferService {
 
     const saved = await this.jobRepo.save(job);
 
-    // Dispatch to BullMQ or local simulated lifecycle
-    let dispatchedToBullMQ = false;
+    // Dispatch to BullMQ for real worker execution
     if (this.operationQueue) {
       try {
         await this.operationQueue.add('backupops:transfer', {
           jobId: saved.id,
           organizationId,
           sourceServerId: dto.sourceServerId,
-          sourcePath: dto.sourcePath,
+          sourcePath: preflightRes.source.path,
           destinationServerId: dto.destinationServerId,
-          destinationPath: dto.destinationPath,
+          destinationPath: preflightRes.destination.path,
           mode: dto.mode,
           verifyChecksum: dto.verifyChecksum !== false,
+          confirmDestructiveMove: dto.confirmDestructiveMove,
+          totalBytes: realTotalBytes,
+          totalFiles: realTotalFiles,
         });
-        dispatchedToBullMQ = true;
         this.logger.log(`Dispatched transfer job ${saved.id} to BullMQ queue`);
       } catch (err: any) {
-        this.logger.warn(`Could not dispatch to BullMQ (${err.message}). Falling back to internal engine runner.`);
+        this.logger.error(`Failed to dispatch to BullMQ queue: ${err.message}`);
+        saved.state = JobState.FAILED;
+        saved.error = `Transfer worker unavailable. Start the BackupOps worker service (${err.message}).`;
+        saved.logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          message: `Transfer worker queue error: ${err.message}. Operation halted.`,
+        });
+        await this.jobRepo.save(saved);
+        throw new BadRequestException(`Failed to queue transfer job: ${err.message}. Ensure Redis and Worker are running.`);
       }
-    }
-
-    if (!dispatchedToBullMQ) {
-      this.runSimulatedTransferLifecycle(saved.id).catch((err) => this.logger.error(err));
+    } else {
+      saved.state = JobState.FAILED;
+      saved.error = 'Transfer queue is not configured or Redis is unreachable.';
+      await this.jobRepo.save(saved);
+      throw new BadRequestException('Transfer queue is not configured or Redis is unreachable.');
     }
 
     return saved;
@@ -189,7 +480,7 @@ export class TransferService {
         finishedAt: j.finishedAt,
         createdAt: j.createdAt,
         verified: opts.verified ?? (j.state === JobState.COMPLETED),
-        checksum: opts.destinationChecksum || 'SHA-256 (verified)',
+        checksum: opts.destinationChecksum || (j.state === JobState.COMPLETED ? 'SHA-256 (verified)' : undefined),
       };
     });
   }
@@ -239,7 +530,21 @@ export class TransferService {
     });
 
     const saved = await this.jobRepo.save(job);
-    this.runSimulatedTransferLifecycle(saved.id, true).catch((err) => this.logger.error(err));
+
+    if (this.operationQueue) {
+      await this.operationQueue.add('backupops:transfer', {
+        jobId: saved.id,
+        organizationId,
+        sourceServerId: saved.sourceResourceId !== 'local' ? saved.sourceResourceId : undefined,
+        sourcePath: saved.options.sourcePath,
+        destinationServerId: saved.destinationResourceId !== 'local' ? saved.destinationResourceId : undefined,
+        destinationPath: saved.options.destinationPath,
+        mode: saved.operationType as 'copy' | 'move',
+        verifyChecksum: saved.options.verifyChecksum !== false,
+        resumeFromCheckpoint: true,
+      });
+    }
+
     return saved;
   }
 
@@ -282,133 +587,20 @@ export class TransferService {
     });
 
     const saved = await this.jobRepo.save(job);
-    this.runSimulatedTransferLifecycle(saved.id).catch((err) => this.logger.error(err));
+
+    if (this.operationQueue) {
+      await this.operationQueue.add('backupops:transfer', {
+        jobId: saved.id,
+        organizationId,
+        sourceServerId: saved.sourceResourceId !== 'local' ? saved.sourceResourceId : undefined,
+        sourcePath: saved.options.sourcePath,
+        destinationServerId: saved.destinationResourceId !== 'local' ? saved.destinationResourceId : undefined,
+        destinationPath: saved.options.destinationPath,
+        mode: saved.operationType as 'copy' | 'move',
+        verifyChecksum: saved.options.verifyChecksum !== false,
+      });
+    }
+
     return saved;
   }
-
-  /**
-   * High-fidelity Transfer Lifecycle Engine
-   * Executes step transitions (Planning -> Running -> Verifying -> Completed)
-   * Tracks real transfer speed (MB/s), ETA (seconds), and enforces MOVE safety!
-   */
-  private async runSimulatedTransferLifecycle(jobId: string, isResuming = false): Promise<void> {
-    let job = await this.jobRepo.findOne({ where: { id: jobId } });
-    if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-    const totalBytes = Number(job.progress.totalBytes) || 18.2 * 1024 * 1024 * 1024;
-    const isMove = job.operationType === 'move';
-
-    // Step 1: PLANNING
-    if (!isResuming) {
-      await new Promise((r) => setTimeout(r, 600));
-      job = await this.jobRepo.findOne({ where: { id: jobId } });
-      if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-      job.state = JobState.PLANNING;
-      job.progress.percentage = 10;
-      job.progress.currentStep = 'Scanning source directory and calculating checksum baseline';
-      if (job.steps[0]) job.steps[0].status = 'completed';
-      if (job.steps[1]) job.steps[1].status = 'running';
-      job.logs.push({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message: 'Connection established. Scanned 142 files. Preparing byte stream.',
-      });
-      await this.jobRepo.save(job);
-    }
-
-    // Step 2: RUNNING (Streaming transfer in progressive chunks)
-    job = await this.jobRepo.findOne({ where: { id: jobId } });
-    if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-    job.state = JobState.RUNNING;
-    if (job.steps[1]) job.steps[1].status = 'completed';
-    if (job.steps[2]) job.steps[2].status = 'running';
-
-    const targetSpeedBytesPerSec = 84 * 1024 * 1024; // 84 MB/s as in Use Case B
-    const checkpoints = [35, 68, 85];
-
-    for (const pct of checkpoints) {
-      await new Promise((r) => setTimeout(r, 900));
-      job = await this.jobRepo.findOne({ where: { id: jobId } });
-      if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-      const bytes = Math.round((pct / 100) * totalBytes);
-      const remainingBytes = totalBytes - bytes;
-      const eta = Math.ceil(remainingBytes / targetSpeedBytesPerSec);
-
-      job.progress.percentage = pct;
-      job.progress.bytesProcessed = bytes;
-      job.progress.transferSpeedBytesPerSec = targetSpeedBytesPerSec;
-      job.progress.etaSeconds = eta;
-      job.progress.currentStep = `Streaming blocks (${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB / ${(totalBytes / (1024 * 1024 * 1024)).toFixed(1)} GB)`;
-      job.options = {
-        ...(job.options || {}),
-        checkpointOffset: bytes,
-      };
-      job.logs.push({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message: `Transfer progress ${pct}%: ${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB transferred at 84 MB/s. ETA: ${Math.floor(eta / 60)}m ${eta % 60}s.`,
-      });
-      await this.jobRepo.save(job);
-    }
-
-    // Step 3: VERIFYING
-    await new Promise((r) => setTimeout(r, 800));
-    job = await this.jobRepo.findOne({ where: { id: jobId } });
-    if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-    job.state = JobState.VERIFYING;
-    job.progress.percentage = 92;
-    job.progress.bytesProcessed = totalBytes;
-    job.progress.transferSpeedBytesPerSec = 0;
-    job.progress.etaSeconds = 0;
-    job.progress.currentStep = 'Computing and verifying destination SHA-256 checksum';
-    if (job.steps[2]) job.steps[2].status = 'completed';
-    if (job.steps[3]) job.steps[3].status = 'running';
-
-    const sourceDigest = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    const destDigest = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    const verified = sourceDigest === destDigest;
-
-    job.logs.push({
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      message: `Integrity check: Destination SHA-256 (${destDigest.slice(0, 16)}...) matches source digest. Verified.`,
-    });
-    await this.jobRepo.save(job);
-
-    // Step 4: MOVE SAFEGUARD OR COPY COMPLETION
-    await new Promise((r) => setTimeout(r, 600));
-    job = await this.jobRepo.findOne({ where: { id: jobId } });
-    if (!job || job.state === JobState.CANCELLED || job.state === JobState.PAUSED) return;
-
-    if (ifMoveCleanupRequired(isMove, verified)) {
-      job.logs.push({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message: 'Destination verified. Safe source cleanup executed. Source directory removed.',
-      });
-    }
-
-    job.state = JobState.COMPLETED;
-    job.progress.percentage = 100;
-    job.progress.currentStep = isMove ? 'Move completed, verified, and source cleaned' : 'Copy completed and verified';
-    job.finishedAt = new Date();
-    if (job.steps[3]) job.steps[3].status = 'completed';
-    if (job.steps[4]) job.steps[4].status = 'completed';
-    job.options = {
-      ...(job.options || {}),
-      verified: true,
-      sourceChecksum: sourceDigest,
-      destinationChecksum: destDigest,
-      sourceDeletedAfterMove: isMove,
-    };
-    await this.jobRepo.save(job);
-  }
-}
-
-function ifMoveCleanupRequired(isMove: boolean, verified: boolean): boolean {
-  return isMove && verified;
 }

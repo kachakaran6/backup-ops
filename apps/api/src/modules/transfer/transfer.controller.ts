@@ -11,7 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TransferService } from './transfer.service';
-import { CreateTransferDto } from './dto/create-transfer.dto';
+import { CreateTransferDto, PreflightTransferDto } from './dto/create-transfer.dto';
 
 @ApiTags('transfers')
 @ApiBearerAuth()
@@ -20,12 +20,20 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 export class TransferController {
   constructor(private readonly transferService: TransferService) {}
 
+  @Post('preflight')
+  @ApiOperation({ summary: 'Validate source and destination paths, capacities, and permissions before transfer' })
+  async preflight(@Request() req: any, @Body() dto: PreflightTransferDto, @Query('organizationId') queryOrgId?: string) {
+    const orgId = queryOrgId || req.user?.organizationId || 'default';
+    return this.transferService.preflight(orgId, dto);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Initiate a server-to-server or data movement transfer (Move/Copy)' })
   async create(@Request() req: any, @Body() dto: CreateTransferDto, @Query('organizationId') queryOrgId?: string) {
     const orgId = queryOrgId || req.user?.organizationId || 'default';
     return this.transferService.create(orgId, dto);
   }
+
 
   @Get()
   @ApiOperation({ summary: 'List all transfer operations' })

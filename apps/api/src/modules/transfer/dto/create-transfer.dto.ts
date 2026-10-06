@@ -1,5 +1,23 @@
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsIn } from 'class-validator';
 
+export class PreflightTransferDto {
+  @IsOptional()
+  @IsString()
+  sourceServerId?: string;
+
+  @IsNotEmpty()
+  @IsString()
+  sourcePath: string;
+
+  @IsOptional()
+  @IsString()
+  destinationServerId?: string;
+
+  @IsNotEmpty()
+  @IsString()
+  destinationPath: string;
+}
+
 export class CreateTransferDto {
   @IsOptional()
   @IsString()
